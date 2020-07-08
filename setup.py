@@ -21,7 +21,7 @@ setup(
     ],
     extras_require={
         'flask': [
-            'Flask-API~=1.1',
+            'Flask-API>=1.1,<3.0',
             'Flask~=1.1.1',
             'simplejson~=3.16.0'
         ]
