@@ -17,7 +17,7 @@ setup(
         'setuptools_scm~=3.3.3'
     ],
     install_requires=[
-        'boto3~=1.12.39'
+        'boto3>=1.12.39,<1.15.0'
     ],
     extras_require={
         'flask': [
