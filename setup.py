@@ -23,7 +23,7 @@ setup(
         'flask': [
             'Flask-API~=1.1',
             'Flask~=1.1.1',
-            'simplejson~=3.16.0'
+            'simplejson>=3.16,<3.18'
         ]
     },
     classifiers=[
