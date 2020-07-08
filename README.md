@@ -274,7 +274,7 @@ The helper methods within Scoutr assume that your API consists of the following 
 - [Get single item by key](#get)
 - [Update single item by key](#update)
 - [Delete single item by key](#delete)
-- [List all audit logs)(#list-audit-logs)
+- [List all audit logs](#list-audit-logs)
 - [View item history](#history)
 
 ### List
