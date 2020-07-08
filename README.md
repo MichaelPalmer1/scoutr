@@ -2,6 +2,8 @@
 
 A simple way to put an API in front of a DynamoDB backend.
 
+A Golang implementation will be released shortly by [MichaelPalmer1](https://github.com/michaelpalmer1).
+
 ## Sample implementation
 
 An sample implementation of this project is provided in the [example](example) folder.
