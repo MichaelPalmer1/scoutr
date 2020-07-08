@@ -2,7 +2,7 @@
 
 A simple way to put an API in front of a DynamoDB backend.
 
-A Golang implementation will be released shortly by [MichaelPalmer1](https://github.com/michaelpalmer1).
+A Golang implementation is available at https://github.com/MichaelPalmer1/scoutr-go.
 
 ## Sample implementation
 
