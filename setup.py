@@ -14,7 +14,7 @@ setup(
     author='Michael Palmer',
     packages=find_packages(),
     setup_requires=[
-        'setuptools_scm~=3.3.3'
+        'setuptools_scm>=3.3.3,<4.2.0'
     ],
     install_requires=[
         'boto3>=1.12.39,<1.15.0'
