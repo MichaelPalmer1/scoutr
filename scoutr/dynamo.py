@@ -1362,8 +1362,7 @@ class DynamoAPI:
         # Return the filtered output
         return output
 
-    @staticmethod
-    def filter(user, filters=None):
+    def filter(self, user, filters=None):
         """
         Build an AND filter expression
 
@@ -1420,72 +1419,97 @@ class DynamoAPI:
 
         # Build filters that were passed in
         for key, value in filters.items():
-            value = unquote_plus(value)
-            if value == '':
-                raise BadRequestException('Filter key %s has no value' % key)
-
-            # Check if this is a magic operator
-            magic_operator_match = re.match(
-                '^(.+)__(in|contains|notcontains|startswith|ne|gt|lt|ge|le|between|exists)$',
-                key
-            )
-            if magic_operator_match:
-                key = magic_operator_match.group(1)
-                operation = magic_operator_match.group(2)
-                attr = Attr(key)
-
-                # Convert to decimal if this is a numeric >, <. >=, <= operation
-                if value.isnumeric() and operation in ('gt', 'lt', 'ge', 'le'):
-                    value = Decimal(value)
-
-                if operation == 'in':
-                    try:
-                        value = json.loads(value)
-                    except json.JSONDecodeError:
-                        raise BadRequestException("Invalid syntax for 'in' magic operator")
-                    if not isinstance(value, list):
-                        raise BadRequestException("Magic operator 'in' must be a JSON list of strings")
-                    elif not value:
-                        raise BadRequestException("In operation for '%s' requires at least one value in the list" % key)
-                    condition = attr.is_in(value)
-                elif operation == 'contains':
-                    condition = attr.contains(value)
-                elif operation == 'notcontains':
-                    condition = Not(attr.contains(value))
-                elif operation == 'exists':
-                    if value == 'true':
-                        condition = attr.exists()
-                    elif value == 'false':
-                        condition = attr.not_exists()
-                elif operation == 'startswith':
-                    condition = attr.begins_with(value)
-                elif operation == 'ne':
-                    condition = attr.ne(value)
-                elif operation == 'gt':
-                    condition = attr.gt(value)
-                elif operation == 'lt':
-                    condition = attr.lt(value)
-                elif operation == 'ge':
-                    condition = attr.gte(value)
-                elif operation == 'le':
-                    condition = attr.lte(value)
-                elif operation == 'between':
-                    try:
-                        value = json.loads(value)
-                    except json.JSONDecodeError:
-                        raise BadRequestException("Invalid syntax for 'between' magic operator")
-                    if not isinstance(value, list) or (isinstance(value, list) and len(value) != 2):
-                        raise BadRequestException("Magic operator 'between' must be a JSON list of 2 values")
-                    condition = attr.between(*value)
-                else:
-                    raise BadRequestException('Unsupported magic operator %s' % operation)
+            if isinstance(value, list):
+                for item in value:
+                    if not isinstance(item, str):
+                        raise BadRequestException('Query filter value must be a string or list of strings')
+                    conditions = self.perform_filter(conditions, key, item)
+            elif isinstance(value, str):
+                conditions = self.perform_filter(conditions, key, value)
             else:
-                condition = Attr(key).eq(value)
+                raise BadRequestException('Query filter value must be a string or list of strings')
 
-            if not isinstance(conditions, ConditionBase):
-                conditions = condition
+        return conditions
+
+    @staticmethod
+    def perform_filter(conditions, key, value):
+        condition = None
+        value = unquote_plus(value)
+        if value == '':
+            raise BadRequestException('Filter key %s has no value' % key)
+
+        # Check if this is a magic operator
+        magic_operator_match = re.match(
+            '^(.+)__(in|notin|contains|notcontains|startswith|ne|gt|lt|ge|le|between|exists)$',
+            key
+        )
+        if magic_operator_match:
+            key = magic_operator_match.group(1)
+            operation = magic_operator_match.group(2)
+            attr = Attr(key)
+
+            # Convert to decimal if this is a numeric >, <. >=, <= operation
+            if value.isnumeric() and operation in ('gt', 'lt', 'ge', 'le'):
+                value = Decimal(value)
+
+            if operation == 'in':
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:
+                    raise BadRequestException("Invalid syntax for 'in' magic operator")
+                if not isinstance(value, list):
+                    raise BadRequestException("Magic operator 'in' must be a JSON list of strings")
+                elif not value:
+                    raise BadRequestException("In operation for '%s' requires at least one value in the list" % key)
+                condition = attr.is_in(value)
+            elif operation == 'notin':
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:
+                    raise BadRequestException("Invalid syntax for 'notin' magic operator")
+                if not isinstance(value, list):
+                    raise BadRequestException("Magic operator 'notin' must be a JSON list of strings")
+                elif not value:
+                    raise BadRequestException("Not In operation for '%s' requires at least one value in the list" % key)
+                condition = Not(attr.is_in(value))
+            elif operation == 'contains':
+                condition = attr.contains(value)
+            elif operation == 'notcontains':
+                condition = Not(attr.contains(value))
+            elif operation == 'exists':
+                if value == 'true':
+                    condition = attr.exists()
+                elif value == 'false':
+                    condition = attr.not_exists()
+            elif operation == 'startswith':
+                condition = attr.begins_with(value)
+            elif operation == 'ne':
+                condition = attr.ne(value)
+            elif operation == 'gt':
+                condition = attr.gt(value)
+            elif operation == 'lt':
+                condition = attr.lt(value)
+            elif operation == 'ge':
+                condition = attr.gte(value)
+            elif operation == 'le':
+                condition = attr.lte(value)
+            elif operation == 'between':
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:
+                    raise BadRequestException("Invalid syntax for 'between' magic operator")
+                if not isinstance(value, list) or (isinstance(value, list) and len(value) != 2):
+                    raise BadRequestException("Magic operator 'between' must be a JSON list of 2 values")
+                condition = attr.between(*value)
             else:
-                conditions &= condition
+                raise BadRequestException('Unsupported magic operator %s' % operation)
+        else:
+            condition = Attr(key).eq(value)
+
+        if not isinstance(conditions, ConditionBase):
+            conditions = condition
+        else:
+            conditions &= condition
 
         return conditions
 
