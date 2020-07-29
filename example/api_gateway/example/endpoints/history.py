@@ -13,7 +13,7 @@ configure_sentry()
 def main(event, context):
     # Get parameters
     item = event['pathParameters']['id']
-    query_params = event.get('queryStringParameters', {}) or {}
+    query_params = event.get('multiValueQueryStringParameters', {}) or {}
 
     try:
         api = DynamoAPI(

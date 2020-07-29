@@ -310,7 +310,7 @@ list-statuses:
 ```python
 def lambda_handler(event, context):
     path_params = event.get('pathParameters', {}) or {}
-    query_params = event.get('queryStringParameters', {}) or {}
+    query_params = event.get('multiValueQueryStringParameters', {}) or {}
     api = DynamoAPI(
         table_name=os.getenv('TableName'),
         auth_table_name=os.getenv('AuthTable'),
@@ -431,7 +431,7 @@ There are two levels of filtering that are supported:
 - Querystring-based filtering
 
 The `list_table()` method accepts both `path_params` and `query_params` as arguments. These are intended to
-contain the values of `pathParameters` and `queryStringParameters`, respectively, that API Gateway passed into Lambda.
+contain the values of `pathParameters` and `multiValueQueryStringParameters`, respectively, that API Gateway passed into Lambda.
 
 ### Dynamic path filters
 
@@ -502,6 +502,7 @@ field2 = value1 AND status = Active
 
 For more complex queries, querystring search supports the below magic operations:
 - `in` (value is in list)
+- `notin` (value is not in list)
 - `ne` (not equal)
 - `startswith` (string starts with)
 - `contains` (string contains)
