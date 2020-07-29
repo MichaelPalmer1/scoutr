@@ -10,7 +10,7 @@ def build_api_gateway_request(event):
         'user': get_api_gateway_user(event)
     }
 
-    query_params = event.get('queryStringParameters', {}) or {}
+    query_params = event.get('multiValueQueryStringParameters', {}) or {}
     if query_params:
         request_data.update({'query_params': query_params})
 
