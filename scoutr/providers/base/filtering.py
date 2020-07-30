@@ -1,12 +1,11 @@
-import json
 import re
 from abc import abstractmethod
 from decimal import Decimal
+from typing import Any
 from urllib.parse import unquote_plus
 
-from boto3.dynamodb.conditions import ConditionBase
-
 from scoutr.exceptions import BadRequestException
+from scoutr.models.user import User
 
 
 class Filtering:
@@ -32,15 +31,14 @@ class Filtering:
         OPERATION_LESS_THAN_EQUAL,
     )
 
-    @abstractmethod
-    def operations(self):
+    def operations(self) -> dict:
         """
         List of supported operations
 
         :return: Supported operations
         :rtype: dict
         """
-        raise NotImplementedError
+        return {}
 
     @abstractmethod
     def And(self, condition1, condition2):
@@ -51,106 +49,100 @@ class Filtering:
         raise NotImplementedError
 
     @abstractmethod
-    def equals(self, attr, value):
-        """
-
-        :param str attr:
-        :param value:
-        """
+    def equals(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def not_equal(self, attr, value):
+    def not_equal(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def starts_with(self, attr, value):
+    def starts_with(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def contains(self, attr, value):
+    def contains(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def not_contains(self, attr, value):
+    def not_contains(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def exists(self, attr, value):
+    def exists(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def greater_than(self, attr, value):
+    def greater_than(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def less_than(self, attr, value):
+    def less_than(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def greater_than_equal(self, attr, value):
+    def greater_than_equal(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def less_than_equal(self, attr, value):
+    def less_than_equal(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def between(self, attr, value):
+    def between(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def is_in(self, attr, value):
+    def is_in(self, attr: str, value):
         raise NotImplementedError
 
     @abstractmethod
-    def not_in(self, attr, value):
+    def not_in(self, attr: str, value):
         raise NotImplementedError
 
-    def user_filters(self, user):
+    def user_filters(self, user: User) -> Any:
         conditions = None
-        for user_filters in user.get('filter_fields', []):
+        for item in user.filter_fields:
             user_conditions = None
-            for item in user_filters:
-                if 'value' not in item:
-                    continue
-
-                if isinstance(item['value'], list):
-                    try:
-                        condition = self.is_in(item['field'], item['value'])
-                    except NotImplementedError:
-                        raise BadRequestException(
-                            'Failed to generate user condition - IN operation is not supported by this provider.'
-                        )
-                    user_conditions = self.And(user_conditions, condition)
-                elif isinstance(item['value'], str):
-                    condition = self.equals(item['field'], item['value'])
-                    user_conditions = self.And(user_conditions, condition)
-                else:
-                    print('Received value of unknown type', item['value'])
-                    print('Type', type(item['value']))
-                    continue
+            if isinstance(item.value, list):
+                try:
+                    condition = self.is_in(item.field, item.value)
+                except NotImplementedError:
+                    raise BadRequestException(
+                        'Failed to generate user condition - IN operation is not supported by this provider.'
+                    )
+                user_conditions = self.And(user_conditions, condition)
+            elif isinstance(item.value, str):
+                condition = self.equals(item.field, item.value)
+                user_conditions = self.And(user_conditions, condition)
+            else:
+                print('Received value of unknown type', item.value)
+                print('Type', type(item.value))
+                continue
 
             conditions = self.Or(conditions, user_conditions)
 
         return conditions
 
-    def filter(self, user, filters):
+    def filter(self, user: User, filters: dict):
         conditions = self.user_filters(user)
 
         # Build filters that were passed in
         for key, value in filters.items():
             if isinstance(value, list):
+                # Multi-value filter
                 for item in value:
                     if not isinstance(item, str):
                         raise BadRequestException('Query filter value must be a string or list of strings')
                     conditions = self.perform_filter(conditions, key, item)
             elif isinstance(value, str):
+                # Single value filter
                 conditions = self.perform_filter(conditions, key, value)
             else:
+                # Invalid
                 raise BadRequestException('Query filter value must be a string or list of strings')
 
-    def perform_filter(self, conditions, key, value):
+    def perform_filter(self, conditions: Any, key: str, value: Any) -> Any:
         condition = None
         value = unquote_plus(value)
         if value == '':

@@ -43,22 +43,22 @@ class AWSFiltering(Filtering):
         else:
             return None
 
-    def equals(self, attr, value):
+    def equals(self, attr: str, value):
         return Attr(attr).eq(value)
 
-    def not_equal(self, attr, value):
+    def not_equal(self, attr: str, value):
         return Attr(attr).ne(value)
 
-    def contains(self, attr, value):
+    def contains(self, attr: str, value):
         return Attr(attr).contains(value)
 
-    def not_contains(self, attr, value):
+    def not_contains(self, attr: str, value):
         return Not(Attr(attr).contains(value))
 
-    def starts_with(self, attr, value):
+    def starts_with(self, attr: str, value):
         return Attr(attr).begins_with(value)
 
-    def exists(self, attr, value):
+    def exists(self, attr: str, value):
         if value == "true":
             return Attr(attr).exists()
         elif value == "false":
@@ -66,19 +66,19 @@ class AWSFiltering(Filtering):
         else:
             raise Exception('Invalid value for exists operation')
 
-    def greater_than(self, attr, value):
+    def greater_than(self, attr: str, value):
         return Attr(attr).gt(value)
 
-    def less_than(self, attr, value):
+    def less_than(self, attr: str, value):
         return Attr(attr).lt(value)
 
-    def greater_than_equal(self, attr, value):
+    def greater_than_equal(self, attr: str, value):
         return Attr(attr).gte(value)
 
-    def less_than_equal(self, attr, value):
+    def less_than_equal(self, attr: str, value):
         return Attr(attr).lte(value)
 
-    def between(self, attr, value):
+    def between(self, attr: str, value):
         if isinstance(value, list):
             values = value
         else:
@@ -87,14 +87,14 @@ class AWSFiltering(Filtering):
             raise Exception('Between operation requires two values')
         return Attr(attr).between(*values)
 
-    def is_in(self, attr, value):
+    def is_in(self, attr: str, value):
         if isinstance(value, list):
             values = value
         else:
             values = json.loads(value)
         return Attr(attr).is_in(values)
 
-    def not_in(self, attr, value):
+    def not_in(self, attr: str, value):
         if isinstance(value, list):
             values = value
         else:

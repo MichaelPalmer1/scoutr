@@ -25,3 +25,7 @@ class NotFoundException(HttpException):
 
     def __init__(self, *args, **kwargs):
         super(HttpException, self).__init__(*args, **kwargs)
+
+
+class InvalidUserException(BadRequestException):
+    pass
