@@ -41,39 +41,67 @@ class PermittedEndpoints:
         return cls(endpoint=data['endpoint'], method=data['method'])
 
 
-class UserData:
-    pass
-
-
-class User:
+class Permissions:
     permitted_endpoints: List[PermittedEndpoints] = []
     filter_fields: List[FilterField] = []
     exclude_fields: List[str] = []
     update_fields_permitted: List[str] = []
     update_fields_restricted: List[str] = []
 
-    @classmethod
-    def load(cls, data: dict):
-        user = cls()
-        for item in data.get('filter_fields', []):
-            user.filter_fields.append(FilterField.load(item))
+    def __init__(self, permitted_endpoints: List[dict]=None, filter_fields: List[dict]=None,
+                 exclude_fields: List[str]=None, update_fields_permitted: List[str]=None,
+                 update_fields_restricted: List[str]=None):
 
-        for item in data.get('permitted_endpoints', []):
-            user.permitted_endpoints.append(PermittedEndpoints.load(item))
+        if not filter_fields:
+            filter_fields = []
+        if not permitted_endpoints:
+            permitted_endpoints = []
+        if not exclude_fields:
+            exclude_fields = []
+        if not update_fields_permitted:
+            update_fields_permitted = []
+        if not update_fields_restricted:
+            update_fields_restricted = []
 
-        for item in data.get('exclude_fields', []):
+        for item in filter_fields:
+            self.filter_fields.append(FilterField.load(item))
+
+        for item in permitted_endpoints:
+            self.permitted_endpoints.append(PermittedEndpoints.load(item))
+
+        for item in exclude_fields:
             if not isinstance(item, str):
                 raise InvalidUserException('Invalid entry on user field exclusions')
-            user.exclude_fields.append(item)
+            self.exclude_fields.append(item)
 
-        for item in data.get('update_fields_permitted', []):
+        for item in update_fields_permitted:
             if not isinstance(item, str):
                 raise InvalidUserException('Invalid entry on user update fields permitted')
-            user.update_fields_permitted.append(item)
+            self.update_fields_permitted.append(item)
 
-        for item in data.get('update_fields_restricted', []):
+        for item in update_fields_restricted:
             if not isinstance(item, str):
                 raise InvalidUserException('Invalid entry on user update fields restricted')
-            user.update_fields_permitted.append(item)
+            self.update_fields_permitted.append(item)
 
-        return user
+
+class User(Permissions):
+    id: str
+    name: str
+    username: str
+    email: str
+    groups: List[str]
+
+    def __init__(self, **kwargs):
+        super(User, self).__init__(**kwargs)
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    @classmethod
+    def load(cls, data: dict):
+        return cls(**data)
+
+
+class Group(Permissions):
+    id: str

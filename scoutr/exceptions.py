@@ -13,6 +13,13 @@ class BadRequestException(HttpException):
         super(HttpException, self).__init__(*args, **kwargs)
 
 
+class ForbiddenException(HttpException):
+    status = 401
+
+    def __init__(self, *args, **kwargs):
+        super(HttpException, self).__init__(*args, **kwargs)
+
+
 class UnauthorizedException(HttpException):
     status = 403
 

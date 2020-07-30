@@ -49,7 +49,7 @@ def get_oidc_user(user, group_attribute=None):
 
 
 def build_oidc_request(request, group_attribute):
-    from scoutr.flask.utils import parse_query_params
+    from scoutr.helpers.flask import parse_query_params
     request_data = {
         'method': request.method,
         'path': request.path,

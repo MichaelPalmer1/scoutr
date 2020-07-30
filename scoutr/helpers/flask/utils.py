@@ -4,7 +4,7 @@ from urllib.parse import parse_qsl
 from flask_api.exceptions import NotFound, PermissionDenied, APIException, ParseError
 
 from scoutr.exceptions import HttpException, UnauthorizedException, NotFoundException, BadRequestException
-from scoutr.flask.oidc import OIDCUser, get_oidc_user
+from scoutr.helpers.flask.oidc import OIDCUser, get_oidc_user
 
 try:
     import sentry_sdk

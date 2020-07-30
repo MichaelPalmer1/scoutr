@@ -4,8 +4,8 @@ from flask_api import FlaskAPI
 from flask_api.exceptions import ParseError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from scoutr.flask.oidc import get_oidc_user, build_oidc_request
-from scoutr.flask.utils import init_flask_user, flaskapi_exception_wrapper, parse_query_params
+from scoutr.helpers.flask.oidc import get_oidc_user, build_oidc_request
+from scoutr.helpers.flask import init_flask_user, flaskapi_exception_wrapper, parse_query_params
 
 
 def init_flask(api, partition_key, primary_list_endpoint, history_actions=('CREATE', 'UPDATE'), group_attribute=None):

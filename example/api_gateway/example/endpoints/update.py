@@ -3,7 +3,7 @@ import os
 
 import sentry_sdk
 
-from scoutr.api_gateway.utils import build_api_gateway_request
+from scoutr.helpers.api_gateway import build_api_gateway_request
 from scoutr.dynamo import DynamoAPI
 from scoutr.exceptions import HttpException
 

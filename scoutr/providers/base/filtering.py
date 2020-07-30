@@ -154,7 +154,7 @@ class Filtering:
             key = magic_operator_match.group(1)
             operation = magic_operator_match.group(2)
 
-            # Convert to decimal if this is a numeric >, <. >=, <= operation
+            # Convert to decimal if this is a numeric operation
             if value.isnumeric() and operation in self.NUMERIC_OPERATIONS:
                 value = Decimal(value)
 

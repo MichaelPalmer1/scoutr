@@ -5,9 +5,9 @@ from flask import request
 from sentry_sdk.integrations.flask import FlaskIntegration
 
 from scoutr.dynamo import DynamoAPI
-from scoutr.flask.oidc import build_oidc_request
-from scoutr.flask.routes import init_flask
-from scoutr.flask.utils import flaskapi_exception_wrapper
+from scoutr.helpers.flask.oidc import build_oidc_request
+from scoutr.helpers.flask.routes import init_flask
+from scoutr.helpers.flask import flaskapi_exception_wrapper
 
 sentry_sdk.init(
     dsn='https://APIKEY@sentry.io/PROJECT-ID',
