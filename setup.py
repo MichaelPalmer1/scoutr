@@ -17,7 +17,9 @@ setup(
         'setuptools_scm>=3.3.3,<4.2.0'
     ],
     install_requires=[
-        'boto3>=1.12.39,<1.15.0'
+        'boto3>=1.12.39,<1.15.0',
+        'mypy',
+        'boto3-stubs[dynamodb]'
     ],
     extras_require={
         'flask': [
