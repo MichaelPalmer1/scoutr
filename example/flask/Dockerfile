@@ -1,4 +1,4 @@
-FROM python:3.7
+FROM python:3.8.5
 
 RUN mkdir /api
 WORKDIR /api
