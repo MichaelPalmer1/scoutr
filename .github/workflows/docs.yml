@@ -23,11 +23,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install mkdocs mkdocs-material
 
-        - name: Build
-          run: mkdocs build
+      - name: Build
+        run: mkdocs build
 
-        - name: Deploy
-          uses: peaceiris/actions-gh-pages@v3
-          with:
-            github_token: ${{ secrets.GITHUB_TOKEN }}
-            publish_dir: ./site
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
