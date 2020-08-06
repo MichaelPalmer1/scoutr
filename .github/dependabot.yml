@@ -48,7 +48,7 @@ updates:
       - MichaelPalmer1
 
   # Maintain dependencies for NPM
-  - package-ecosystem: "docker"
+  - package-ecosystem: "npm"
     directory: "/example/api_gateway"
     schedule:
       interval: "daily"

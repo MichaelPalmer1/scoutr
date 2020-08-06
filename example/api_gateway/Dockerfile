@@ -1,4 +1,4 @@
-FROM python:3.7
+FROM python:3.8.5
 RUN apt-get update
 RUN apt-get install npm -y
 RUN npm install -g serverless
