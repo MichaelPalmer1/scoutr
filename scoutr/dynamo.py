@@ -1009,6 +1009,119 @@ class DynamoAPI:
 
         return output
 
+    def list_table_set(self, request, unique_key=None, path_params=None, query_params=None):
+        """
+        List all values in a table
+        :param dict request: Request object
+        :param str unique_key: If specified, then only the unique values of rows containing this column will be returned
+        :param dict path_params: Path parameters passed in from API Gateway: Each parameter should be formatted as:
+            {
+                "field_name": "search_value"
+            }
+        Additionally, a dynamic search is supported if a "search_key" path parameter is configured as shown:
+            /list/{search_key}/{search_value}
+        Which should produce a path parameters dict:
+            {
+                "search_key": "field name",
+                "search_value": "value to search"
+            }
+        It should be noted that in the event that the same parameter is passed in both path_params and query_params,
+        the value in path_params takes precedence.
+        :param dict query_params: Query parameters passed in from API Gateway. Each parameter should be formatted as:
+            {
+                "field_name": "search_value"
+            }
+        Multiple items in the dictionary will be chained together and function as an AND statement. It should be noted
+        that in the event that the same parameter is passed in both path_params and query_params, the value in
+        path_params takes precedence.
+        :return: Data from the table
+        :rtype: dict
+        """
+        if path_params is None:
+            path_params = {}
+        if query_params is None:
+            query_params = {}
+
+        # Get user
+        user = self._initialize_request(request)
+
+        # Check if a unique key should be returned
+        args = {}
+        if unique_key:
+            filter_expression = self.filter(user, query_params)
+            if filter_expression:
+                filter_expression &= Attr(unique_key).exists()
+            else:
+                filter_expression = Attr(unique_key).exists()
+
+            unique_key_name = '#' + unique_key
+            args.update({
+                'FilterExpression': filter_expression,
+                'ExpressionAttributeNames': {unique_key_name: unique_key},
+                'ProjectionExpression': unique_key_name
+            })
+        else:
+            # Generate dynamic search
+            if 'search_key' in path_params and 'search_value' in path_params:
+                # Map `search_key` and `search_value`
+                path_params.update({path_params['search_key']: path_params['search_value']})
+
+                # Remove these from path parameters
+                del path_params['search_key']
+                del path_params['search_value']
+
+            # Path parameters take precedence
+            query_params.update(path_params)
+
+            # Generate the filter arguments
+            conditions = self.filter(user, query_params)
+
+            if conditions:
+                args.update({'FilterExpression': conditions})
+
+        # Download data
+        try:
+            data = self._scan(self.table, **args)
+        except ClientError as e:
+            logger.error(
+                '[%(user)s] Encountered error while attempting to list records: [%(code)s] %(error)s' % {
+                    'user': self.user_identifier(user),
+                    'code': e.response['Error']['Code'],
+                    'error': e.response['Error']['Message']
+                }
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                '[%(user)s] Encountered error while attempting to list records: %(error)s' % {
+                    'user': self.user_identifier(user),
+                    'error': str(e)
+                }
+            )
+            raise
+
+        if has_sentry:
+            sentry_sdk.add_breadcrumb(
+                category='query',
+                message=args.get('FilterExpression', 'Scanned table'),
+                level='info',
+                table=self.table.name
+            )
+
+        # Filter response
+        output = self.filter_response(user, data)
+        if has_sentry:
+            sentry_sdk.add_breadcrumb(category='data', message='Filtered data response', level='info')
+
+        # Make sure a unique, sorted list is returned
+        if unique_key:
+            output = sorted(set([item for sublist in [item[unique_key] for item in data] for item in sublist]))
+
+        # Create audit log
+        self._audit_log(action='LIST', request=request, user=user)
+
+        return output
+
     def search(self, request, key, values):
         """
         Perform a multi-value search of a field in the table. The search endpoint should be configured in API Gateway:
