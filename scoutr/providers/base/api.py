@@ -1,21 +1,24 @@
 import re
 from abc import abstractmethod
-from typing import List
+from datetime import datetime, timedelta
+from typing import List, Union, Dict
 
 from scoutr.exceptions import UnauthorizedException, BadRequestException, ForbiddenException
+from scoutr.models.audit import AuditLog, AuditUser
+from scoutr.models.config import Config
 from scoutr.models.request import Request, UserData
-from scoutr.models.user import User
+from scoutr.models.user import User, Group, Permissions
 from scoutr.providers.base.filtering import Filtering
+from scoutr.utils.utils import merge_lists
 
 
 class BaseAPI:
-    filter: Filtering
-    config: dict
+    filtering: Filtering
 
-    def get_config(self):
-        return self.config
+    def __init__(self, config: Config):
+        self.config = config
 
-    def can_access_endpoint(self, method: str, path: str, user: User, request: Request=None) -> bool:
+    def can_access_endpoint(self, method: str, path: str, user: User, request: Request = None) -> bool:
         if request:
             # Fetch the user
             try:
@@ -55,6 +58,12 @@ class BaseAPI:
 
         return user
 
+    @staticmethod
+    def merge_permissions(user: User, group: Group):
+        for attribute in Permissions.attributes():
+            value = merge_lists(getattr(user, attribute), getattr(group, attribute))
+            setattr(user, attribute, value)
+
     def get_user(self, user_id: str, user_data: UserData) -> User:
         is_user = True
         user = User(id=user_id)
@@ -84,11 +93,18 @@ class BaseAPI:
                 # Add sub-groups
                 user.groups.extend(entitlement.groups)
 
-                # TODO: Merge permitted endpoints
-                # TODO: Merge exclude fields
-                # TODO: Merge update fields restricted
-                # TODO: Merge update fields permitted
-                # TODO: Merge filter fields
+                # Merge permissions
+                user.permitted_endpoints = merge_lists(user.permitted_endpoints, entitlement.permitted_endpoints)
+                user.exclude_fields = merge_lists(user.exclude_fields, entitlement.exclude_fields)
+                user.update_fields_restricted = merge_lists(
+                    user.update_fields_restricted,
+                    entitlement.update_fields_restricted
+                )
+                user.update_fields_permitted = merge_lists(
+                    user.update_fields_permitted,
+                    entitlement.update_fields_permitted
+                )
+                user.filter_fields = merge_lists(user.filter_fields, entitlement.filter_fields)
 
         # Check that a user was found
         if not is_user and not entitlement_ids:
@@ -101,7 +117,8 @@ class BaseAPI:
                 # Group is not in the table
                 raise UnauthorizedException(f"Group '{group_id}' does not exist")
 
-            # TODO: Merge permissions
+            # Merge user and group permissions together
+            self.merge_permissions(user, group)
 
         # Save user groups before applying metadata
         user_groups = user.groups.copy()
@@ -132,9 +149,24 @@ class BaseAPI:
         if not user.id or not user.username or not user.name or not user.email:
             raise UnauthorizedException('User missing one of the following fields: id, username, name, email')
 
-        # TODO: Validate exclude fields
+        # Validate exclude fields
+        for item in user.exclude_fields:
+            if not isinstance(item, str):
+                raise UnauthorizedException(f"User '{user.id}' field 'exclude_fields' must be a list of strings")
 
-        # TODO: Validate filter fields
+        # Validate filter fields
+        for item in user.filter_fields:
+            if not isinstance(item, list):
+                raise UnauthorizedException(
+                    f"User '{user.id}' field 'filter_fields' must be a list of lists of dictionaries with each item "
+                    "formatted as {'field': 'field_name', 'value': 'value'}"
+                )
+            for sub_item in item:
+                if not isinstance(sub_item, dict) or 'field' not in sub_item or 'value' not in sub_item:
+                    raise UnauthorizedException(
+                        f"User '{user.id}' field 'filter_fields' must be a list of lists of dictionaries with each item "
+                        "formatted as {'field': 'field_name', 'value': 'value'}"
+                    )
 
         # Make sure all the endpoints are valid regex
         for item in user.permitted_endpoints:
@@ -158,16 +190,90 @@ class BaseAPI:
 
         raise ForbiddenException(f'Not authorized to perform {req.method} on endpoint {req.path}')
 
+    def post_process(self, data: List[dict], user: User) -> List[dict]:
+        # If no filtering is necessary, return output
+        if not user.exclude_fields:
+            return data
+
+        fields_logged = set()
+        for item in data:
+            # Remove fields the user shouldn't be able to see
+            for field in user.exclude_fields:
+                if field in item:
+                    if field not in fields_logged:
+                        print('[%(user)s] Excluding field "%(field)s" from response' % {
+                            'user': self.user_identifier(user),
+                            'field': field
+                        })
+                        fields_logged.add(field)
+                    del item[field]
+
+        # Return the filtered output
+        return data
+
+    def audit_log(self, action: str, request: Request, user: User,
+                  resource: Dict[str, str] = None, changes: Dict[str, str] = None):
+        # Only send audit logs if the table is configured
+        if not self.config.audit_table:
+            return
+
+        # Create audit log
+        now = datetime.utcnow()
+        audit_log: AuditLog = AuditLog(
+            time=now.isoformat(),
+            user=AuditUser(
+                id=user.id,
+                name=user.name,
+                username=user.username,
+                source_ip=request.source_ip,
+                user_agent=request.user_agent,
+                filter_fields=user.filter_fields
+            ),
+            action=action,
+            method=request.method,
+            path=request.path
+        )
+
+        # Add expiry time for read events
+        if action in ('GET', 'LIST', 'SEARCH'):
+            expire_time = now + timedelta(days=self.config.log_retention_days)
+            audit_log.expire_time = int(expire_time.timestamp())
+
+        if request.query_params:
+            audit_log.query_params = request.query_params
+
+        # Add body
+        if request.body:
+            audit_log.body = request.body
+        elif changes:
+            audit_log.body = changes
+
+        # Add resource
+        if resource:
+            audit_log.resource = resource
+
+        # Marshal to dict
+        item = dict(audit_log)
+
+        # Add the record
+        if not self.store_item(self.config.audit_table, item):
+            print('Failed to store audit log')
+            print('Failed audit log', item)
+
     @staticmethod
     def user_identifier(user: User):
         return f'{user.id}: {user.name} ({user.username} - {user.email})'
 
     @abstractmethod
-    def get_auth(self, user_id: str) -> User:
+    def store_item(self, table: str, item: dict) -> bool:
         raise NotImplementedError
 
     @abstractmethod
-    def get_group(self, group_id: str) -> User:
+    def get_auth(self, user_id: str) -> Union[User, None]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_group(self, group_id: str) -> Group:
         raise NotImplementedError
 
     @abstractmethod

@@ -1,4 +1,5 @@
-from typing import List, Any
+import inspect
+from typing import List, Any, Dict
 
 from scoutr.exceptions import InvalidUserException
 
@@ -31,7 +32,7 @@ class PermittedEndpoints:
         self.method = method
 
     @classmethod
-    def load(cls, data: dict):
+    def load(cls, data: Dict[str, str]):
         if 'endpoint' not in data or 'method' not in data:
             raise InvalidUserException('Invalid entry on user permitted endpoints')
         if not isinstance(data['endpoint'], str):
@@ -43,14 +44,14 @@ class PermittedEndpoints:
 
 class Permissions:
     permitted_endpoints: List[PermittedEndpoints] = []
-    filter_fields: List[FilterField] = []
+    filter_fields: List[List[FilterField]] = []
     exclude_fields: List[str] = []
     update_fields_permitted: List[str] = []
     update_fields_restricted: List[str] = []
 
-    def __init__(self, permitted_endpoints: List[dict]=None, filter_fields: List[dict]=None,
-                 exclude_fields: List[str]=None, update_fields_permitted: List[str]=None,
-                 update_fields_restricted: List[str]=None):
+    def __init__(self, permitted_endpoints: List[Dict[str, str]] = None, filter_fields: List[List[dict]] = None,
+                 exclude_fields: List[str] = None, update_fields_permitted: List[str] = None,
+                 update_fields_restricted: List[str] = None):
 
         if not filter_fields:
             filter_fields = []
@@ -64,25 +65,22 @@ class Permissions:
             update_fields_restricted = []
 
         for item in filter_fields:
-            self.filter_fields.append(FilterField.load(item))
+            fields = []
+            for sub_item in item:
+                fields.append(FilterField.load(sub_item))
+            self.filter_fields.append(fields)
 
         for item in permitted_endpoints:
             self.permitted_endpoints.append(PermittedEndpoints.load(item))
 
-        for item in exclude_fields:
-            if not isinstance(item, str):
-                raise InvalidUserException('Invalid entry on user field exclusions')
-            self.exclude_fields.append(item)
+        self.exclude_fields = exclude_fields
+        self.update_fields_permitted = update_fields_permitted
+        self.update_fields_restricted = update_fields_restricted
 
-        for item in update_fields_permitted:
-            if not isinstance(item, str):
-                raise InvalidUserException('Invalid entry on user update fields permitted')
-            self.update_fields_permitted.append(item)
-
-        for item in update_fields_restricted:
-            if not isinstance(item, str):
-                raise InvalidUserException('Invalid entry on user update fields restricted')
-            self.update_fields_permitted.append(item)
+    @classmethod
+    def attributes(cls):
+        attributes = inspect.getmembers(cls, lambda a: not (inspect.isroutine(a)))
+        return [a[0] for a in attributes if not (a[0].startswith('__') and a[0].endswith('__'))]
 
 
 class User(Permissions):
@@ -105,3 +103,13 @@ class User(Permissions):
 
 class Group(Permissions):
     id: str
+
+    def __init__(self, **kwargs):
+        super(Group, self).__init__(**kwargs)
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    @classmethod
+    def load(cls, data: dict):
+        return cls(**data)
