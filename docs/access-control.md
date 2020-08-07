@@ -22,6 +22,7 @@ and passes the OIDC claims as headers.
 The simplest method to setup the API is to use [Flask API](https://www.flaskapi.org/). Helper methods have been
 provided to make the setup as simple as possible. The [`init_flask`](https://github.com/GESkunkworks/scoutr/blob/master/scoutr/flask/routes.py#L11) method
 automatically generates the belows endpoints:
+
 - GET `/user/` - Returns information about the authenticated user
 - POST `/user/has-permission/` - Determine if user has permission to access an endpoint. The body of this request should
     contain `method` and `path` keys as JSON.
@@ -85,6 +86,7 @@ perform the call. For convenience, regular expressions can be used within the `e
 ### Groups
 
 A group object be made up of:
+
 - `group_id` - Identifier for the group
 - `permitted_endpoints` - Optional list of permitted endpoints
 - `filter_fields` - Optional list of field filters
@@ -142,6 +144,7 @@ The name of the group table must be passed in to the constructor.
 #### Types
 
 There are three types of accepted authentication identifiers:
+
 - USERNAME
 - OIDC_GROUP
 - API_KEY
@@ -167,6 +170,7 @@ If a user is a member of more than one OIDC group, the permissions granted by ea
 together to generate the effective permissions applied to the user.
 
 ##### API_KEY
+
 - id (partition key) - this is the api key id
 - name
 - username
@@ -192,6 +196,7 @@ combined together with the permissions outlined in the groups the user is a memb
 level **DO NOT** override those specified at the group level - they are combined.
 
 If a user is a member of multiple OIDC groups, the permissions are combined such that
+
 - Any `filter_fields` definied in a child `groups` block are combined together with an `AND` expression
 - All of the combined permissions in each OIDC group the user is a member of are combined together with an `OR` expression
 
@@ -231,6 +236,7 @@ follow the below format:
 ```
 
 The following fields may not be included or may not have values for all types of actions:
+
 - body
 - query_params
 - path_params
