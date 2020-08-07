@@ -42,14 +42,3 @@ class Model:
     @classmethod
     def load(cls, data: Dict[str, Any]):
         return cls(**data)
-
-
-class TestData(Model):
-    id: int
-    name: str
-
-
-class TestModel(Model):
-    name: str
-    data: TestData
-    items: List[str]
