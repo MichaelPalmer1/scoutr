@@ -6,6 +6,10 @@ theme:
   icon:
     repo: fontawesome/brands/github
 
+google_analytics:
+  - UA-69269008-3
+  - auto
+
 nav:
   - index.md
   - setup.md
