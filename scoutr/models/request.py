@@ -1,19 +1,21 @@
 from typing import List, Any
 
+from scoutr.models import Model
 
-class UserData:
+
+class UserData(Model):
     username: str
     name: str
     email: str
     groups: List[str]
 
 
-class RequestUser:
+class RequestUser(Model):
     id: str
     data: UserData
 
 
-class Request:
+class Request(Model):
     user: RequestUser
     method: str
     path: str

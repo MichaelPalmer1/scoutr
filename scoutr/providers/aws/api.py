@@ -4,6 +4,7 @@ import boto3
 import mypy_boto3_dynamodb as dynamodb
 from botocore.exceptions import ClientError
 
+from scoutr.models.config import Config
 from scoutr.models.request import Request
 from scoutr.models.user import User, Group
 from scoutr.providers.aws.filtering import AWSFiltering
@@ -13,15 +14,18 @@ from scoutr.providers.base.api import BaseAPI
 class DynamoAPI(BaseAPI):
     filtering = AWSFiltering()
 
-    def __init__(self, **kwargs):
-        super(DynamoAPI, self).__init__(**kwargs)
+    def __init__(self, config: Config):
+        super(DynamoAPI, self).__init__(config)
         resource: dynamodb.DynamoDBServiceResource = boto3.resource('dynamodb')
         self.resource = resource
-        self.client = resource.Table(self.config.data_table)
+        self.data_table = resource.Table(self.config.data_table)
+        self.auth_table = resource.Table(self.config.auth_table)
+        self.group_table = resource.Table(self.config.group_table)
+        self.audit_table = resource.Table(self.config.audit_table)
 
     def get_auth(self, user_id: str) -> Union[User, None]:
         # Try to find user in the auth table
-        result: dict = self.client.get_item(Key={'id': user_id})
+        result: dict = self.auth_table.get_item(Key={'id': user_id})
 
         if not result.get('Item'):
             return None
@@ -30,7 +34,14 @@ class DynamoAPI(BaseAPI):
         return User.load(result['Item'])
 
     def get_group(self, group_id: str) -> Group:
-        pass
+        # Try to find user in the auth table
+        result: dict = self.group_table.get_item(Key={'group_id': group_id})
+
+        if not result.get('Item'):
+            return None
+
+        # Create user object
+        return Group.load(result['Item'])
 
     def store_item(self, table: str, item: dict) -> bool:
         try:
@@ -51,7 +62,7 @@ class DynamoAPI(BaseAPI):
             items.extend(response['Items'])
         return items
 
-    def create(self, request: Request, data: dict, validation: dict) -> dict:
+    def create(self, request: Request, data: dict, validation: dict = None) -> dict:
         pass
 
     def update(self, request: Request, partition_key: dict, data: dict, validation: dict) -> dict:
@@ -81,7 +92,7 @@ class DynamoAPI(BaseAPI):
         if conditions:
             args.update({'FilterExpression': conditions})
 
-        data = self._scan(self.client, **args)
+        data = self._scan(self.data_table, **args)
         data = self.post_process(data, user)
 
         self.audit_log('LIST', request, user)

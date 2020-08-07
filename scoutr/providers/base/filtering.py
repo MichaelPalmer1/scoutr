@@ -142,6 +142,8 @@ class Filtering:
                 # Invalid
                 raise BadRequestException('Query filter value must be a string or list of strings')
 
+        return conditions
+
     def perform_filter(self, conditions: Any, key: str, value: Any) -> Any:
         condition = None
         value = unquote_plus(value)

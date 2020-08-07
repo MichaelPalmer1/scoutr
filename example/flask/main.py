@@ -1,43 +1,45 @@
 import os
 
-import sentry_sdk
+# import sentry_sdk
 from flask import request
-from sentry_sdk.integrations.flask import FlaskIntegration
-
-from scoutr.dynamo import DynamoAPI
+# from sentry_sdk.integrations.flask import FlaskIntegration
+from scoutr.models.config import Config
+from scoutr.providers.aws.api import DynamoAPI
 from scoutr.helpers.flask.oidc import build_oidc_request
 from scoutr.helpers.flask.routes import init_flask
-from scoutr.helpers.flask import flaskapi_exception_wrapper
+from scoutr.helpers.flask.utils import flaskapi_exception_wrapper
 
-sentry_sdk.init(
-    dsn='https://APIKEY@sentry.io/PROJECT-ID',
-    integrations=[FlaskIntegration()],
-    environment=os.getenv('ENV', 'dev'),
-    release='PROJECT-NAME@VERSION'
+# sentry_sdk.init(
+#     dsn='https://APIKEY@sentry.io/PROJECT-ID',
+#     integrations=[FlaskIntegration()],
+#     environment=os.getenv('ENV', 'dev'),
+#     release='PROJECT-NAME@VERSION'
+# )
+
+config = Config(
+    data_table='data',
+    auth_table='auth',
+    group_table='groups',
+    audit_table='audit',
+    primary_key='id'
 )
 
-api = DynamoAPI(
-    table_name='scoutr',
-    auth_table_name='scoutr-auth',
-    group_table_name='scoutrgroups',
-    audit_table_name='scoutr-audit',
-)
-
+api = DynamoAPI(config)
 app = init_flask(
     api=api,
-    partition_key='item_id',
     primary_list_endpoint='/items/',
-    group_attribute='groups'
 )
+
 
 @app.route("/item/", methods=['POST'])
 @flaskapi_exception_wrapper
 def create_item():
     """Create an item"""
     return api.create(
-        request=build_oidc_request(request, 'groups'),
-        item=request.data
+        request=build_oidc_request(api, request),
+        data=request.data
     )
+
 
 if __name__ == "__main__":
     app.run(debug=True)

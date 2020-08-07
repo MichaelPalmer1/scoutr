@@ -29,5 +29,6 @@ def build_api_gateway_request(event):
 
     return request_data
 
+
 def get_api_gateway_user(event):
     return {'id': event['requestContext']['identity']['apiKeyId']}

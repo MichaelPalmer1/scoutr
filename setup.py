@@ -26,10 +26,15 @@ setup(
             'Flask-API>=1.1,<3.0',
             'Flask~=1.1.1',
             'simplejson>=3.16,<3.18'
+        ],
+        'docs': [
+            'mkdocs',
+            'mkdocs-material'
         ]
     },
     classifiers=[
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
         'Development Status :: 5 - Production/Stable'
     ]
 )

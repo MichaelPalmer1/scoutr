@@ -1,7 +1,7 @@
 import re
 from abc import abstractmethod
 from datetime import datetime, timedelta
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Iterable
 
 from scoutr.exceptions import UnauthorizedException, BadRequestException, ForbiddenException
 from scoutr.models.audit import AuditLog, AuditUser
@@ -253,7 +253,7 @@ class BaseAPI:
             audit_log.resource = resource
 
         # Marshal to dict
-        item = dict(audit_log)
+        item = audit_log.dict()
 
         # Add the record
         if not self.store_item(self.config.audit_table, item):
@@ -301,7 +301,7 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def history(self, request: Request, key: str, value: str, query_params: dict, actions: List[str]) -> List[dict]:
+    def history(self, request: Request, key: str, value: str, query_params: dict, actions: Iterable[str]) -> List[dict]:
         raise NotImplementedError
 
     @abstractmethod
