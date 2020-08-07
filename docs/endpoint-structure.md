@@ -14,7 +14,7 @@ when the environment variable is not specified. Then, just configure your "list 
 environment variable.
 
 ### Serverless Example
-```yml
+```yaml
 # Unique listing of all values of the `status` key that the user is permitted to see
 list-statuses:
   handler: endpoints.list.main
