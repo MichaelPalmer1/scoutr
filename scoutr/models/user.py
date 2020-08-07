@@ -21,7 +21,7 @@ class PermittedEndpoints(Model):
             raise InvalidUserException('Invalid entry on user permitted endpoints')
         if not isinstance(data['method'], str):
             raise InvalidUserException('Invalid entry on user permitted endpoints')
-        return cls(endpoint=data['endpoint'], method=data['method'])
+        return cls(**data)
 
 
 class Permissions(Model):
