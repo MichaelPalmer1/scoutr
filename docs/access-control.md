@@ -176,7 +176,7 @@ together to generate the effective permissions applied to the user.
 
 Optionally, each auth object can include a `groups` object, which should be a list of group ids that the user is a
 member of:
-```
+```json
 {
     "groups": [
         "read-only",
