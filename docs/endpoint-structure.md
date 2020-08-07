@@ -48,7 +48,7 @@ def lambda_handler(event, context):
 ## Search multiple values for a single search key
 
 Lookup information about multiple items (POST `/search/{search_key}`)
-```
+```json
 [
     "123456789012"
 ]
