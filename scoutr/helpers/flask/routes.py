@@ -51,6 +51,7 @@ def init_flask(api: BaseAPI, primary_list_endpoint: str, history_actions: Tuple[
             'authorized': api.can_access_endpoint(
                 method=request.data['method'],
                 path=request.data['path'],
+                user=request.user,
                 request=build_oidc_request(api, request)
             )
         }
@@ -69,8 +70,7 @@ def init_flask(api: BaseAPI, primary_list_endpoint: str, history_actions: Tuple[
             path_params = {f'resource.{api.config.primary_key}': item}
         return api.list_audit_logs(
             request=build_oidc_request(api, request),
-            path_params=path_params,
-            query_params=parse_query_params(request.query_string)
+            param_overrides=path_params
         )
 
     @app.route('/history/<item>/', methods=['GET'])
@@ -80,7 +80,6 @@ def init_flask(api: BaseAPI, primary_list_endpoint: str, history_actions: Tuple[
             request=build_oidc_request(api, request),
             key=api.config.primary_key,
             value=item,
-            query_params=parse_query_params(request.query_string),
             actions=history_actions
         )
 

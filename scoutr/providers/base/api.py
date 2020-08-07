@@ -297,11 +297,11 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def list_audit_logs(self, request: Request, path_params: dict, query_params: dict) -> List[dict]:
+    def list_audit_logs(self, request: Request, param_overrides: dict) -> List[dict]:
         raise NotImplementedError
 
     @abstractmethod
-    def history(self, request: Request, key: str, value: str, query_params: dict, actions: Iterable[str]) -> List[dict]:
+    def history(self, request: Request, key: str, value: str, actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
         raise NotImplementedError
 
     @abstractmethod

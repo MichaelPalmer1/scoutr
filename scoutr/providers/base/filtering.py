@@ -1,7 +1,7 @@
 import re
 from abc import abstractmethod
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import unquote_plus
 
 from scoutr.exceptions import BadRequestException
@@ -100,7 +100,10 @@ class Filtering:
     def not_in(self, attr: str, value):
         raise NotImplementedError
 
-    def user_filters(self, user: User) -> Any:
+    def user_filters(self, user: Optional[User]) -> Any:
+        if not user:
+            return
+
         conditions = None
         for item in user.filter_fields:
             user_conditions = None
@@ -124,7 +127,7 @@ class Filtering:
 
         return conditions
 
-    def filter(self, user: User, filters: dict):
+    def filter(self, user: Optional[User], filters: dict):
         conditions = self.user_filters(user)
 
         # Build filters that were passed in

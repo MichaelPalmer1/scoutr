@@ -1,6 +1,6 @@
 ## Installation
 
-To install Scoutr, install it using Pip. While Scoutr should work on Python 2, only Python 3 is officially supported.
+To install Scoutr, install it using Pip. Python 3.6+ is supported.
 
 ```
 pip install scoutr
