@@ -22,12 +22,10 @@ provider:
   tags:
     app: ${self:service}
     env: ${self:provider.stage}
-    uai: UAI3033130
 
   stackTags:
     app: ${self:service}
     env: ${self:provider.stage}
-    uai: UAI3033130
 
   environment:
     Stage: ${self:provider.stage}
