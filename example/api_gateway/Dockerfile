@@ -14,6 +14,3 @@ COPY package.json .
 RUN npm install
 
 COPY . .
-
-ENTRYPOINT ["sls"]
-CMD ["deploy"]
