@@ -1,7 +1,7 @@
 import re
 from abc import abstractmethod
 from datetime import datetime, timedelta
-from typing import List, Union, Dict, Iterable
+from typing import List, Union, Dict, Iterable, Optional, Any
 
 from scoutr.exceptions import UnauthorizedException, BadRequestException, ForbiddenException
 from scoutr.models.audit import AuditLog, AuditUser
@@ -190,6 +190,29 @@ class BaseAPI:
 
         raise ForbiddenException(f'Not authorized to perform {req.method} on endpoint {req.path}')
 
+    @staticmethod
+    def validate_fields(validation: dict, item: dict, existing_item: Optional[dict] = None,
+                        ignore_field_presence: bool = False):
+        # Check for required fields
+        if not ignore_field_presence:
+            missing_keys = set(validation.keys()).difference(set(item.keys()))
+            if missing_keys:
+                raise BadRequestException('Missing required fields %s' % missing_keys)
+
+        # Perform field validation
+        for key, func in validation.items():
+            if key in item:
+                response = func(item[key], item, existing_item)
+                if isinstance(response, dict):
+                    if 'result' not in response:
+                        raise BadRequestException('Validator for %s is not properly configured' % key)
+                    elif not response['result']:
+                        if not isinstance(response.get('message'), str):
+                            raise BadRequestException('Validator for %s is not properly configured' % key)
+                        raise BadRequestException(response['message'])
+                elif not response:
+                    raise BadRequestException("Invalid value for key '%s'" % key)
+
     def post_process(self, data: List[dict], user: User) -> List[dict]:
         # If no filtering is necessary, return output
         if not user.exclude_fields:
@@ -269,11 +292,11 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def get_auth(self, user_id: str) -> Union[User, None]:
+    def get_auth(self, user_id: str) -> Optional[User]:
         raise NotImplementedError
 
     @abstractmethod
-    def get_group(self, group_id: str) -> Group:
+    def get_group(self, group_id: str) -> Optional[Group]:
         raise NotImplementedError
 
     @abstractmethod
@@ -285,7 +308,7 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def get(self, request: Request, record: str) -> dict:
+    def get(self, request: Request, key: Any, value: Any) -> dict:
         raise NotImplementedError
 
     @abstractmethod

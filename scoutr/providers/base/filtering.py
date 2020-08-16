@@ -127,7 +127,10 @@ class Filtering:
 
         return conditions
 
-    def filter(self, user: Optional[User], filters: dict):
+    def filter(self, user: Optional[User], filters: dict = None):
+        if filters is None:
+            filters = {}
+
         conditions = self.user_filters(user)
 
         # Build filters that were passed in
