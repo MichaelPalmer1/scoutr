@@ -3,8 +3,9 @@ import os
 
 import sentry_sdk
 
+from example.api_gateway.example.utils import get_config
 from scoutr.helpers.api_gateway import build_api_gateway_request
-from scoutr.dynamo import DynamoAPI
+from scoutr.providers.aws import DynamoAPI
 from scoutr.exceptions import HttpException
 
 from example.constants import CREATE_FIELDS
@@ -14,12 +15,7 @@ configure_sentry()
 
 def main(event, context):
     try:
-        api = DynamoAPI(
-            table_name=os.getenv('TableName'),
-            auth_table_name=os.getenv('AuthTable'),
-            group_table_name=os.getenv('GroupTable'),
-            audit_table_name=os.getenv('AuditTable')
-        )
+        api = DynamoAPI(get_config())
         item = json.loads(event['body'])
 
         # Perform field validation

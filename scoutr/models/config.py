@@ -3,7 +3,7 @@ class Config:
     auth_table: str = ''
     audit_table: str = ''
     group_table: str = ''
-    primary_key: str = ''
+    primary_key: str = 'id'
     log_retention_days: int = 30
     oidc_username_header: str = ''
     oidc_name_header: str = ''
@@ -11,7 +11,7 @@ class Config:
     oidc_group_header: str = ''
 
     def __init__(self, data_table: str = '', auth_table: str = '', audit_table: str = '', group_table: str = '',
-                 primary_key: str = '', log_retention_days: int = 30, oidc_username_header: str = '',
+                 primary_key: str = 'id', log_retention_days: int = 30, oidc_username_header: str = '',
                  oidc_name_header: str = '', oidc_email_header: str = '', oidc_group_header: str = ''):
         self.data_table = data_table
         self.auth_table = auth_table

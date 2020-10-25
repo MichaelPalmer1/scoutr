@@ -1,6 +1,6 @@
 import re
 
-from scoutr.dynamo import DynamoAPI
+from scoutr.providers.aws import DynamoAPI
 
 
 """
@@ -16,7 +16,7 @@ Fields required for record creation
 """
 CREATE_FIELDS = {
     'id': lambda value, item, existing_item: {
-        'result': re.match('^\d{6}', value),
+        'result': re.match(r'^\d{6}', value),
         'message': 'Invalid id'
     },
     'description': lambda value, item, existing_item: isinstance(value, str),

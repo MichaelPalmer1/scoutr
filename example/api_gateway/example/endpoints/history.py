@@ -3,7 +3,8 @@ import os
 
 import sentry_sdk
 
-from scoutr.dynamo import DynamoAPI
+from example.api_gateway.example.utils import get_config
+from scoutr.providers.aws import DynamoAPI
 from scoutr.exceptions import HttpException
 
 from example.utils import configure_sentry
@@ -16,12 +17,7 @@ def main(event, context):
     query_params = event.get('multiValueQueryStringParameters', {}) or {}
 
     try:
-        api = DynamoAPI(
-            table_name=os.getenv('TableName'),
-            auth_table_name=os.getenv('AuthTable'),
-            group_table_name=os.getenv('GroupTable'),
-            audit_table_name=os.getenv('AuditTable')
-        )
+        api = DynamoAPI(get_config())
 
         # Fetch the item's history
         history = api.history(

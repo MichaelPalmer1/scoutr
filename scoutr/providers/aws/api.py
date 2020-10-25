@@ -1,7 +1,7 @@
 import json
 import logging
 from copy import deepcopy
-from typing import List, Union, Dict, Optional, Any
+from typing import List, Dict, Optional, Any
 
 import boto3
 import mypy_boto3_dynamodb as dynamodb
@@ -77,6 +77,16 @@ class DynamoAPI(BaseAPI):
         return items
 
     def create(self, request: Request, data: dict, validation: dict = None) -> dict:
+        """
+        Create an item in Dynamo
+
+        :param Request request: Request object
+        :param dict data: Item to create
+        :param dict validation: Optional dictionary containing mappings of field name to callable. See the docstring
+        in the _validate_fields method for more information.
+        :return: Created item
+        :rtype: dict
+        """
         # Get user
         user = self.initialize_request(request)
 
@@ -167,6 +177,24 @@ class DynamoAPI(BaseAPI):
 
     def update(self, request: Request, partition_key: dict, data: dict, validation: dict, condition=None,
                condition_failure_message='', audit_action='UPDATE') -> dict:
+        """
+        Update an item in Dynamo
+
+        :param Request request: Request object
+        :param dict partition_key: Dictionary formatted as {"partition_key": "value_of_row_to_update"}
+        :param dict data: Fields to update, formatted as {"key": "value"}
+        :param dict validation: Optional dictionary containing mappings of field name to callable. See the
+        docstring in the _validate_fields method for more information.
+        :param dict condition: Optional condition expression to apply to this update. If the condition fails to return
+        successful, then this item will not be updated in Dynamo.
+        :param str condition_failure_message: If the conditional check fails, this optional error message
+        will be displayed to the user.
+        :param str audit_action: Action to use in the audit log. This defaults to UPDATE, and is provided as a
+        convenience to the user in case customizing the phrasing is desired. This cannot be one of the reserved
+        built-in actions: CREATE, DELETE, GET, LIST, SEARCH.
+        :return: Updated item
+        :rtype: dict
+        """
         # Get user
         user = self.initialize_request(request)
 
@@ -306,6 +334,15 @@ class DynamoAPI(BaseAPI):
         return self.post_process([response['Attributes']], user)[0]
 
     def get(self, request: Request, key: Any, value: Any) -> dict:
+        """
+        Get a specific item from the table
+
+        :param Request request: Request object
+        :param str key: Key to search on
+        :param str value: Value to search for
+        :return: Item
+        :rtype: dict
+        """
         # Get user
         user = self.initialize_request(request)
 
@@ -338,6 +375,13 @@ class DynamoAPI(BaseAPI):
             return output[0]
 
     def list(self, request: Request) -> List[dict]:
+        """
+        List all values in a table
+
+        :param Request request: Request object
+        :return: Data from the table
+        :rtype: dict
+        """
         user = self.initialize_request(request)
 
         params: Dict[str, str] = {}
@@ -417,6 +461,19 @@ class DynamoAPI(BaseAPI):
         return output
 
     def list_audit_logs(self, request: Request, param_overrides: dict = None) -> List[dict]:
+        """
+        List all audit logs
+
+        :param Request request: Request object
+        :param dict param_overrides: Parameter overrides: Each parameter should be formatted as:
+
+            {
+                "field_name": "search_value"
+            }
+
+        :return: List of audit logs, sorted with most recent entry first
+        :rtype: list of dict
+        """
         if not self.config.audit_table:
             raise NotFoundException('Audit logs are not enabled')
 
@@ -471,6 +528,16 @@ class DynamoAPI(BaseAPI):
         return data
 
     def history(self, request: Request, key: str, value: str, actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
+        """
+        Given a resource key and value, build the history of the item over time.
+
+        :param Request request: Request object
+        :param str key: Resource key
+        :param str value: Resource value
+        :param tuple of str actions: List of actions to filter on
+        :return: List of the record's history
+        :rtype: list of dict
+        """
         if not self.config.audit_table:
             raise NotFoundException('Audit logs are not enabled')
 
@@ -520,6 +587,20 @@ class DynamoAPI(BaseAPI):
         return history
 
     def search(self, request: Request, key: str, values: List[str]) -> List[dict]:
+        """
+        Perform a multi-value search of a field in the table. The search endpoint should be configured in API Gateway:
+
+            POST /search/{search_key}
+
+        The value of {search_key} should be passed in as `key` and the contents of the POST request body should be
+        passed in as the `values` list.
+
+        :param Request request: Request object
+        :param str key: Field to search
+        :param list of str values: Search values
+        :return: Search results
+        :rtype: dict
+        """
         # Get user
         user = self.initialize_request(request)
 
@@ -549,6 +630,18 @@ class DynamoAPI(BaseAPI):
         return self.post_process(output, user)
 
     def delete(self, request: Request, partition_key: dict, condition=None, condition_failure_message=''):
+        """
+        Delete an item from Dynamo
+
+        :param Request request: Request object
+        :param dict partition_key: Dictionary formatted as {"partition_key": "value_of_row_to_delete"}
+        :param boto3.dynamodb.conditions.ComparisonCondition condition: Optional condition to apply to this deletion.
+        :param str condition_failure_message: If the conditional check fails, this optional error message
+        will be displayed
+        to the user.
+        :return: Success
+        :rtype: dict
+        """
         # Get user
         user = self.initialize_request(request)
 

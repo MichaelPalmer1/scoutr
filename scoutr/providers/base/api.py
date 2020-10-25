@@ -1,7 +1,7 @@
 import re
 from abc import abstractmethod
 from datetime import datetime, timedelta
-from typing import List, Union, Dict, Iterable, Optional, Any
+from typing import List, Dict, Optional, Any
 
 from scoutr.exceptions import UnauthorizedException, BadRequestException, ForbiddenException
 from scoutr.models.audit import AuditLog, AuditUser
@@ -164,8 +164,8 @@ class BaseAPI:
             for sub_item in item:
                 if not isinstance(sub_item, dict) or 'field' not in sub_item or 'value' not in sub_item:
                     raise UnauthorizedException(
-                        f"User '{user.id}' field 'filter_fields' must be a list of lists of dictionaries with each item "
-                        "formatted as {'field': 'field_name', 'value': 'value'}"
+                        f"User '{user.id}' field 'filter_fields' must be a list of lists of dictionaries with each "
+                        "item formatted as {'field': 'field_name', 'value': 'value'}"
                     )
 
         # Make sure all the endpoints are valid regex
@@ -193,6 +193,39 @@ class BaseAPI:
     @staticmethod
     def validate_fields(validation: dict, item: dict, existing_item: Optional[dict] = None,
                         ignore_field_presence: bool = False):
+        """
+        Perform field validation before creating/updating items into Dynamo
+
+        Expected that the field_validation argument consists of a dictionary formatted as:
+
+            {
+                "field_name": callable_that_returns_bool,
+                "field_name_2": callable_that_returns_dict
+            }
+
+            The callable should accept three arguments. The first is the input value and the second is the entire
+            item that is being validating (in case complex filters are needed that cross-reference against other
+            field values). The last argument is the value of the existing item (used during record updates). When
+            validating record creations, the passed value will be `None`.
+
+            It can either return a boolean or a dictionary. If it returns a boolean that evaluates to
+            False, then a BadRequestException will be raised with the default error message "Invalid value for key
+            'field_name'". If the callable returns a dictionary, it is expected that the dictionary is structured as:
+
+                {
+                    "result": bool,
+                    "message": "message that should be returned to the user if 'result' is False"
+                }
+
+            This dictionary format allows for customizing the error message returned to the user.
+
+        :param dict validation: Dictionary that maps fields to their validation callables
+        :param dict item: Data that should be validated
+        :param dict existing_item: Existing item in Dynamo
+        :param bool ignore_field_presence: If True and a field specified in `field_validation` does not exist in
+        `data`, this will raise a BadRequestException. If False, missing fields will be ignored.
+        :raises: BadRequestException
+        """
         # Check for required fields
         if not ignore_field_presence:
             missing_keys = set(validation.keys()).difference(set(item.keys()))
@@ -282,6 +315,28 @@ class BaseAPI:
         if not self.store_item(self.config.audit_table, item):
             print('Failed to store audit log')
             print('Failed audit log', item)
+
+    @classmethod
+    def value_in_list(cls, value, valid_options, option_name='option', custom_error_message=None):
+        """
+        Check if a value is contained in a list of valid options. This is supplied as a convenience function
+        and is intended to be used with the input field validation on creates/updates.
+
+        :param str value: Value to check
+        :param list of str valid_options: List of options that the value should be included in for this to be successful
+        :param str option_name: Optional descriptive name of the option that can be used to enrich an error message.
+        :param str custom_error_message: Optional custom error message to return instead of the default one.
+        :return: Dictionary that can be used with the field_validation
+        :rtype: dict
+        """
+        return {
+            'result': value in valid_options,
+            'message': custom_error_message or "%s is not a valid %s. Valid options: %s" % (
+                value,
+                option_name,
+                valid_options
+            )
+        }
 
     @staticmethod
     def user_identifier(user: User):
