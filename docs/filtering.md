@@ -21,7 +21,7 @@ To configure this in API Gateway, setup path parameters on the resource:
 
 Or when using serverless:
 
-```yml
+```yaml
 events:
   - http:
       path: endpoint

@@ -14,7 +14,7 @@ when the environment variable is not specified. Then, just configure your "list 
 environment variable.
 
 ### Serverless Example
-```yml
+```yaml
 # Unique listing of all values of the `status` key that the user is permitted to see
 list-statuses:
   handler: endpoints.list.main
@@ -48,7 +48,7 @@ def lambda_handler(event, context):
 ## Search multiple values for a single search key
 
 Lookup information about multiple items (POST `/search/{search_key}`)
-```
+```json
 [
     "123456789012"
 ]
