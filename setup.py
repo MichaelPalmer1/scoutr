@@ -8,7 +8,7 @@ setup(
     description='Generic full access control API for talking to Dynamo via API Gateway',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    keywords='dynamo api rbac',
+    keywords='dynamo nosql api rbac',
     url='https://github.com/GESkunkworks/scoutr',
     use_scm_version=True,
     author='Michael Palmer',
