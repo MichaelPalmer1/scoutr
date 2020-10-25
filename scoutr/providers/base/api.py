@@ -1,7 +1,7 @@
 import re
 from abc import abstractmethod
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Callable, Union
 
 from scoutr.exceptions import UnauthorizedException, BadRequestException, ForbiddenException
 from scoutr.models.audit import AuditLog, AuditUser
@@ -14,6 +14,8 @@ from scoutr.utils.utils import merge_lists
 
 class BaseAPI:
     filtering: Filtering
+    unique_func: Callable[[List[Dict], str], List[str]] = \
+        lambda data, key: sorted(set([item[key] for item in data if item]))
 
     def __init__(self, config: Config):
         self.config = config
@@ -371,7 +373,7 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def list_unique_values(self, request: Request, key: str) -> List[str]:
+    def list_unique_values(self, request: Request, key: str, unique_func: Callable[[List[Dict], str], List[str]]) -> List[str]:
         raise NotImplementedError
 
     @abstractmethod

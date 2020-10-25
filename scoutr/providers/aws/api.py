@@ -1,7 +1,7 @@
 import json
 import logging
 from copy import deepcopy
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Callable
 
 import boto3
 import mypy_boto3_dynamodb as dynamodb
@@ -409,7 +409,8 @@ class DynamoAPI(BaseAPI):
 
         return data
 
-    def list_unique_values(self, request: Request, key: str) -> List[str]:
+    def list_unique_values(self, request: Request, key: str,
+                           unique_func: Callable[[List[Dict], str], List[str]] = BaseAPI.unique_func) -> List[str]:
         # Get the user
         user = self.initialize_request(request)
 
@@ -453,7 +454,7 @@ class DynamoAPI(BaseAPI):
         data = self.post_process(data, user)
 
         # Make sure a unique, sorted list is returned
-        output = sorted(set([item[key] for item in data if item]))
+        output = unique_func(data, key)
 
         # Create audit log
         self.audit_log('LIST', request, user)
