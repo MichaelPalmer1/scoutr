@@ -1,4 +1,4 @@
-from typing import get_type_hints, Dict, Any, List
+from typing import get_type_hints, Dict, Any
 
 
 class Model:

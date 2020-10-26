@@ -80,7 +80,7 @@ class BaseAPI:
 
         # Try to find supplied entitlements in the auth table
         entitlement_ids: List[str] = []
-        if user_data:
+        if user_data and user_data.groups:
             for group_id in user_data.groups:
                 entitlement = self.get_auth(group_id)
                 if not entitlement:

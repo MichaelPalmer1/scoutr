@@ -1,4 +1,4 @@
-from typing import List, Any
+from typing import List, Any, Optional
 
 from scoutr.models import Model
 
@@ -12,7 +12,7 @@ class UserData(Model):
 
 class RequestUser(Model):
     id: str
-    data: UserData
+    data: Optional[UserData] = None
 
 
 class Request(Model):

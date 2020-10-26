@@ -1,9 +1,9 @@
 import simplejson as json
-import os
 
 import sentry_sdk
 
-from example.api_gateway.example.utils import get_config
+from example.utils import get_config
+from scoutr.helpers.api_gateway import build_api_gateway_request
 from scoutr.providers.aws import DynamoAPI
 from scoutr.exceptions import HttpException
 
@@ -11,20 +11,19 @@ from example.utils import configure_sentry
 
 configure_sentry()
 
+
 def main(event, context):
     # Get parameters
     item = event['pathParameters']['id']
-    query_params = event.get('multiValueQueryStringParameters', {}) or {}
 
     try:
         api = DynamoAPI(get_config())
 
         # Fetch the item's history
         history = api.history(
+            request=build_api_gateway_request(event),
             key='id',
-            value=item,
-            query_params=query_params,
-            actions=('CREATE', 'UPDATE', 'DELETE')
+            value=item
         )
 
     except HttpException as e:

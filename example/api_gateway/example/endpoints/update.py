@@ -3,7 +3,7 @@ import os
 
 import sentry_sdk
 
-from example.api_gateway.example.utils import get_config
+from example.utils import get_config
 from scoutr.helpers.api_gateway import build_api_gateway_request
 from scoutr.providers.aws import DynamoAPI
 from scoutr.exceptions import HttpException
@@ -12,6 +12,7 @@ from example.constants import UPDATE_FIELDS
 from example.utils import configure_sentry
 
 configure_sentry()
+
 
 def main(event, context):
     # Get item id
@@ -26,7 +27,7 @@ def main(event, context):
             request=build_api_gateway_request(event),
             partition_key={'id': item_id},
             data=body,
-            field_validation=UPDATE_FIELDS
+            validation=UPDATE_FIELDS
         )
 
     except HttpException as e:

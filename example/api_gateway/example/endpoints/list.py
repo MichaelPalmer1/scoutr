@@ -3,7 +3,7 @@ import os
 
 import sentry_sdk
 
-from example.api_gateway.example.utils import get_config
+from example.utils import get_config
 from scoutr.helpers.api_gateway import build_api_gateway_request
 from scoutr.providers.aws import DynamoAPI
 from scoutr.exceptions import HttpException
@@ -12,19 +12,18 @@ from example.utils import configure_sentry
 
 configure_sentry()
 
-def main(event, context):
-    # Get parameters
-    path_params = event.get('pathParameters', {}) or {}
-    query_params = event.get('multiValueQueryStringParameters', {}) or {}
 
+def main(event, context):
     try:
         api = DynamoAPI(get_config())
-        data = api.list_table(
-            request=build_api_gateway_request(event),
-            unique_key=os.getenv('UniqueKey'),
-            path_params=path_params,
-            query_params=query_params
-        )
+        unique_key = os.getenv('UniqueKey')
+        if unique_key:
+            data = api.list_unique_values(
+                request=build_api_gateway_request(event),
+                key=unique_key
+            )
+        else:
+            data = api.list(request=build_api_gateway_request(event))
 
     except HttpException as e:
         if e.status == 500:

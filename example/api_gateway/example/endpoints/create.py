@@ -3,7 +3,7 @@ import os
 
 import sentry_sdk
 
-from example.api_gateway.example.utils import get_config
+from example.utils import get_config
 from scoutr.helpers.api_gateway import build_api_gateway_request
 from scoutr.providers.aws import DynamoAPI
 from scoutr.exceptions import HttpException
@@ -13,6 +13,7 @@ from example.utils import configure_sentry
 
 configure_sentry()
 
+
 def main(event, context):
     try:
         api = DynamoAPI(get_config())
@@ -21,8 +22,8 @@ def main(event, context):
         # Perform field validation
         data = api.create(
             request=build_api_gateway_request(event),
-            item=item,
-            field_validation=CREATE_FIELDS
+            data=item,
+            validation=CREATE_FIELDS
         )
 
     except HttpException as e:
