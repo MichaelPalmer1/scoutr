@@ -1,19 +1,20 @@
 import json
 import logging
 from copy import deepcopy
-from typing import List, Dict, Optional, Any, Callable, Tuple, Union
+from typing import List, Dict, Optional, Any, Callable, Union, Tuple
 
 import boto3
-import mypy_boto3_dynamodb as dynamodb
 from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import ClientError
+from firebase_admin import firestore
+from google.cloud.firestore_v1 import Client, DocumentSnapshot, CollectionReference, Query
 
 from scoutr.exceptions import NotFoundException, BadRequestException, UnauthorizedException
 from scoutr.models.config import Config
 from scoutr.models.request import Request
 from scoutr.models.user import User, Group
-from scoutr.providers.aws.filtering import AWSFiltering
 from scoutr.providers.base.api import BaseAPI
+from scoutr.providers.gcp.filtering import GCPFiltering
 
 try:
     import sentry_sdk
@@ -25,56 +26,43 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-class DynamoAPI(BaseAPI):
-    filtering = AWSFiltering()
-
+class FirestoreAPI(BaseAPI):
     def __init__(self, config: Config):
-        super(DynamoAPI, self).__init__(config)
-        resource: dynamodb.DynamoDBServiceResource = boto3.resource('dynamodb')
-        self.resource = resource
-        self.data_table = resource.Table(self.config.data_table)
-        self.auth_table = resource.Table(self.config.auth_table)
-        self.group_table = resource.Table(self.config.group_table)
-        self.audit_table = resource.Table(self.config.audit_table)
+        super(FirestoreAPI, self).__init__(config)
+        self.db: Client = firestore.client()
+        self.data_table: CollectionReference = self.db.collection(self.config.data_table)
+        self.audit_table: CollectionReference = self.db.collection(self.config.audit_table)
+        self.auth_table: CollectionReference = self.db.collection(self.config.auth_table)
+        self.group_table: CollectionReference = self.db.collection(self.config.group_table)
 
     def get_auth(self, user_id: str) -> Optional[User]:
         # Try to find user in the auth table
-        result: Dict = self.auth_table.get_item(Key={'id': user_id})
+        result: DocumentSnapshot = self.auth_table.document(user_id).get()
 
-        if not result.get('Item'):
+        if not result.exists:
             return None
 
         # Create user object
-        return User.load(result['Item'])
+        return User.load(result.to_dict())
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table
-        result: dict = self.group_table.get_item(Key={'group_id': group_id})
+        result: DocumentSnapshot = self.group_table.document(group_id).get()
 
-        if not result.get('Item'):
+        if not result.exists:
             return None
 
         # Create user object
-        return Group.load(result['Item'])
+        return Group.load(result.to_dict())
 
     def store_item(self, table: str, item: dict) -> bool:
         try:
-            self.resource.Table(table).put_item(Item=item)
-        except ClientError as e:
+            self.db.collection(table).document().set(item)
+        except Exception as e:
             print('Failed to store record: %s', e)
             return False
 
         return True
-
-    @staticmethod
-    def _scan(resource, **kwargs):
-        response = resource.scan(**kwargs)
-        items = response['Items']
-        while response.get('LastEvaluatedKey', False):
-            kwargs.update({'ExclusiveStartKey': response['LastEvaluatedKey']})
-            response = resource.scan(**kwargs)
-            items.extend(response['Items'])
-        return items
 
     def create(self, request: Request, data: dict, validation: dict = None,
                required_fields: Union[List, Tuple] = ()) -> dict:
@@ -85,7 +73,7 @@ class DynamoAPI(BaseAPI):
         :param dict data: Item to create
         :param dict validation: Optional dictionary containing mappings of field name to callable. See the docstring
         in the _validate_fields method for more information.
-        :param list required_fields: Optional list of required fields
+        :param list required_fields: List of required fields
         :return: Created item
         :rtype: dict
         """
@@ -117,48 +105,23 @@ class DynamoAPI(BaseAPI):
                         isinstance(filter_value, str) and value != filter_value:
                     raise BadRequestException(f'Unauthorized value for field {key}')
 
-        # Build condition to ensure the unique key does not exist
-        resource: Dict[str, str] = {}
-        conditions = None
-        for schema in self.data_table.key_schema:
-            condition = Attr(schema['AttributeName']).not_exists()
-            resource.update({schema['AttributeName']: data.get(schema['AttributeName'])})
-            if not conditions:
-                conditions = condition
-            else:
-                conditions &= condition
+        # Make sure primary key is included
+        document_id = data.get(self.config.primary_key)
+        if not document_id:
+            raise BadRequestException('Primary key %s is required' % self.config.primary_key)
 
-        # Add to dynamo
+        # Set the resource identifier
+        resource = {self.config.primary_key: document_id}
+
+        # TODO: Build condition to ensure the unique key does not exist
+
+        # Save the item
         try:
-            self.data_table.put_item(Item=data, ConditionExpression=conditions)
+            self.data_table.document(document_id).set(data)
             logger.info('[%(user)s] Successfully created item:\n%(item)s' % {
                 'user': self.user_identifier(user),
                 'item': data
             })
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                logger.warning('[%(user)s] Unable to create item because the conditional check failed:\n%(item)s' % {
-                    'user': self.user_identifier(user),
-                    'item': data
-                })
-                raise BadRequestException('Item already exists or you do not have permission to create it.')
-            elif e.response['Error']['Code'] == 'ValidationException':
-                logger.error('[%(user)s] Validation error - %(error)s:\n%(item)s' % {
-                    'user': self.user_identifier(user),
-                    'error': e.response['Error']['Message'],
-                    'item': data
-                })
-                raise BadRequestException(e.response['Error']['Message'])
-            logger.error(
-                '[%(user)s] Encountered error while attempting to create record '
-                '[%(code)s] %(error)s. Item:\n%(item)s' % {
-                    'user': self.user_identifier(user),
-                    'code': e.response['Error']['Code'],
-                    'error': e.response['Error']['Message'],
-                    'item': data
-                }
-            )
-            raise
         except Exception as e:
             logger.error(
                 '[%(user)s] Encountered error while attempting to create record %(error)s. Item:\n%(item)s' % {
@@ -170,28 +133,22 @@ class DynamoAPI(BaseAPI):
             raise
 
         if has_sentry:
-            sentry_sdk.add_breadcrumb(category='data', message='Created item in Dynamo', level='info')
+            sentry_sdk.add_breadcrumb(category='data', message='Created item in Firestore', level='info')
 
         # Create audit log
         self.audit_log(action='CREATE', resource=resource, request=request, user=user)
 
         return resource
 
-    def update(self, request: Request, partition_key: dict, data: dict, validation: dict = None, condition=None,
-               condition_failure_message='', audit_action='UPDATE') -> dict:
+    def update(self, request: Request, primary_key: dict, data: dict, validation: dict, audit_action='UPDATE') -> dict:
         """
         Update an item in Dynamo
 
         :param Request request: Request object
-        :param dict partition_key: Dictionary formatted as {"partition_key": "value_of_row_to_update"}
+        :param dict primary_key: Dictionary formatted as {"partition_key": "value_of_row_to_update"}
         :param dict data: Fields to update, formatted as {"key": "value"}
         :param dict validation: Optional dictionary containing mappings of field name to callable. See the
         docstring in the _validate_fields method for more information.
-        :param list required_fields: List of required fields
-        :param dict condition: Optional condition expression to apply to this update. If the condition fails to return
-        successful, then this item will not be updated in Dynamo.
-        :param str condition_failure_message: If the conditional check fails, this optional error message
-        will be displayed to the user.
         :param str audit_action: Action to use in the audit log. This defaults to UPDATE, and is provided as a
         convenience to the user in case customizing the phrasing is desired. This cannot be one of the reserved
         built-in actions: CREATE, DELETE, GET, LIST, SEARCH.
@@ -206,18 +163,9 @@ class DynamoAPI(BaseAPI):
         if audit_action in ('CREATE', 'DELETE', 'GET', 'LIST', 'SEARCH'):
             raise Exception('%s is a reserved built-in audit action' % audit_action)
 
-        # Get the existing item / make sure it actually exists and user has permission to access it
-        base_conditions = None
-        for key, value in partition_key.items():
-            # Check if the partition key is specified in the data input
-            if key in data:
-                raise BadRequestException('Partition key cannot be updated')
-
-            cond = Attr(key).eq(value)
-            if base_conditions:
-                base_conditions &= cond
-            else:
-                base_conditions = cond
+        # Deny updates to primary key
+        if self.config.primary_key in data:
+            raise BadRequestException('Primary key %s cannot be updated' % self.config.primary_key)
 
         # Make sure the user has permission to update all of the fields specified
         if user.update_fields_permitted:
@@ -234,20 +182,16 @@ class DynamoAPI(BaseAPI):
                 raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
 
         # Add in the user's permissions
-        user_conditions = self.filtering.filter(user)
-        if user_conditions:
-            if base_conditions:
-                base_conditions &= user_conditions
-            else:
-                base_conditions = user_conditions
+        filtering = GCPFiltering(self.data_table)
+        filtering.filter(user)
 
         # Get the existing item
-        existing_item = self._scan(self.data_table, FilterExpression=base_conditions)
+        existing_item = filtering.query.stream()
         if len(existing_item) == 0:
-            logger.info('[%(user)s] Partition key "%(partition_key)s" does not exist or user does '
+            logger.info('[%(user)s] Primary key "%(partition_key)s" does not exist or user does '
                         'not have permission to access it' % {
                             'user': self.user_identifier(user),
-                            'partition_key': partition_key
+                            'partition_key': primary_key
                         })
             raise NotFoundException('Item does not exist or you do not have permission to access it')
         elif len(existing_item) > 1:
@@ -261,66 +205,29 @@ class DynamoAPI(BaseAPI):
         if validation:
             self.validate_fields(
                 validation=validation,
-                required_fields=[],
+                required_fields=(),
                 item=data,
                 existing_item=existing_item
             )
             if has_sentry:
                 sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
 
-        # Build the update expression
-        updates = []
-        names = {}
-        values = {}
-        for key, value in data.items():
-            names['#' + key] = key
-            values[':' + key] = value
-            updates.append(f'#{key} = :{key}')
-        update_expression = 'SET ' + ', '.join(updates)
-
         # Perform the update item call
         try:
-            args = {}
-            if condition:
-                args['ConditionExpression'] = condition
-
-            response = self.data_table.update_item(
-                Key=partition_key,
-                UpdateExpression=update_expression,
-                ExpressionAttributeNames=names,
-                ExpressionAttributeValues=values,
-                ReturnValues='ALL_NEW',
-                **args
-            )
+            document_id = primary_key[self.config.primary_key]
+            self.data_table.document(document_id).update(data)
+            response = self.data_table.document(document_id).get()
             logger.info('[%(user)s] Successfully updated record "%(partition_key)s" with values:\n%(item)s' % {
                 'user': self.user_identifier(user),
-                'partition_key': partition_key,
+                'partition_key': primary_key,
                 'item': data
             })
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                logger.warning('[%(user)s] Unable to update item because the conditional check failed:\n%(item)s' % {
-                    'user': self.user_identifier(user),
-                    'item': data
-                })
-                raise BadRequestException(condition_failure_message or 'Conditional check failed')
-            logger.error(
-                '[%(user)s] Encountered error while attempting to update record '
-                '"%(partition_key)s": [%(code)s] %(error)s. Item:\n%(item)s' % {
-                    'user': self.user_identifier(user),
-                    'partition_key': partition_key,
-                    'code': e.response['Error']['Code'],
-                    'error': e.response['Error']['Message'],
-                    'item': data
-                }
-            )
-            raise
         except Exception as e:
             logger.error(
                 '[%(user)s] Encountered error while attempting to update record '
                 '"%(partition_key)s": %(error)s. Item:\n%(item)s' % {
                     'user': self.user_identifier(user),
-                    'partition_key': partition_key,
+                    'partition_key': primary_key,
                     'error': str(e),
                     'item': data
                 }
@@ -331,10 +238,10 @@ class DynamoAPI(BaseAPI):
             sentry_sdk.add_breadcrumb(category='data', message='Updated item in Dynamo', level='info')
 
         # Create audit log
-        self.audit_log(action=audit_action, resource=partition_key, changes=data, request=request, user=user)
+        self.audit_log(action=audit_action, resource=primary_key, changes=data, request=request, user=user)
 
         # Return updated record
-        return self.post_process([response['Attributes']], user)[0]
+        return self.post_process([response.to_dict()], user)[0]
 
     def get(self, request: Request, key: Any, value: Any) -> dict:
         """
@@ -350,14 +257,15 @@ class DynamoAPI(BaseAPI):
         user = self.initialize_request(request)
 
         # Filter the data according to the user's permissions
-        conditions = self.filtering.filter(user)
+        filtering = GCPFiltering(self.data_table)
+        conditions = filtering.filter(user)
         if conditions:
             conditions &= Attr(key).eq(value)
         else:
             conditions = Attr(key).eq(value)
 
         # Search for the item
-        data = self._scan(self.data_table, FilterExpression=conditions)
+        data = filtering.query.stream()
         if has_sentry:
             sentry_sdk.add_breadcrumb(
                 category='query', message='%s = %s' % (key, value), level='info', table=self.config.data_table
@@ -401,11 +309,16 @@ class DynamoAPI(BaseAPI):
             del params['search_value']
 
         args = {}
-        conditions = self.filtering.filter(user, params)
+        filtering = GCPFiltering(self.data_table)
+        conditions = filtering.filter(user, params)
         if conditions:
             args.update({'FilterExpression': conditions})
 
-        data = self._scan(self.data_table, **args)
+        data = []
+        for record in filtering.query.stream():
+            record_dict = record.to_dict()
+            record_dict[self.config.primary_key] = record.id
+            data.append(record_dict)
         data = self.post_process(data, user)
 
         self.audit_log('LIST', request, user)
@@ -423,9 +336,10 @@ class DynamoAPI(BaseAPI):
         params.update(request.path_params)
 
         # Build filters
-        conditions = self.filtering.filter(user, params)
+        filtering = GCPFiltering(self.data_table)
+        conditions = filtering.filter(user, params)
 
-        # Add unique key existence filter
+        # TODO: Add unique key existence filter
         key_cond = Attr(key).exists()
         if conditions:
             conditions &= key_cond
@@ -434,7 +348,7 @@ class DynamoAPI(BaseAPI):
 
         # Download the data
         try:
-            data = self._scan(self.data_table, FilterExpression=conditions)
+            data = filtering.query.stream()
         except ClientError as e:
             logger.error(
                 '[%(user)s] Encountered error while attempting to list records: [%(code)s] %(error)s' % {
@@ -491,14 +405,12 @@ class DynamoAPI(BaseAPI):
         user = self.initialize_request(request)
 
         # Build filters
-        args = {}
-        conditions = self.filtering.filter(None, request.query_params)
-        if conditions:
-            args['FilterExpression'] = conditions
+        filtering = GCPFiltering(self.audit_table)
+        filtering.filter(None, request.query_params)
 
         # Download data
         try:
-            data = self._scan(self.audit_table, **args)
+            data = filtering.query.stream()
         except ClientError as e:
             logger.error(
                 '[%(user)s] Encountered error while attempting to list audit logs: [%(code)s] %(error)s' % {
@@ -521,7 +433,7 @@ class DynamoAPI(BaseAPI):
         if has_sentry:
             sentry_sdk.add_breadcrumb(
                 category='query',
-                message=args.get('FilterExpression', 'Scanned table'),
+                message='Scanned table',
                 level='info',
                 table=self.config.audit_table
             )
@@ -609,23 +521,19 @@ class DynamoAPI(BaseAPI):
         user = self.initialize_request(request)
 
         # Build multi-value filter expressions
-        expressions = self.filtering.multi_filter(user, key, values)
+        filtering = GCPFiltering(self.data_table)
+        filters = filtering.multi_filter(user, key, values)
         if has_sentry:
             sentry_sdk.add_breadcrumb(category='data', message='Built multi-value filter', level='info')
 
         # Perform each generated filter expression and then combine the results together
         output = []
-        for expression in expressions:
-            # Download data
-            data = self._scan(self.data_table, FilterExpression=expression)
-
-            if has_sentry:
-                sentry_sdk.add_breadcrumb(
-                    category='query', message=expression, level='info', table=self.config.data_table
-                )
-
-            # Add to output
-            output.extend(data)
+        for f in filters:
+            for record in f.stream():
+                # Add to output
+                record_dict = record.to_dict()
+                record_dict[self.config.primary_key] = record.id
+                output.append(record_dict)
 
         # Create audit log
         self.audit_log(action='SEARCH', request=request, user=user)
@@ -633,89 +541,50 @@ class DynamoAPI(BaseAPI):
         # Return the filtered response
         return self.post_process(output, user)
 
-    def delete(self, request: Request, partition_key: dict, condition=None, condition_failure_message='') -> dict:
+    def delete(self, request: Request, primary_key: dict) -> dict:
         """
-        Delete an item from Dynamo
+        Delete an item
 
         :param Request request: Request object
-        :param dict partition_key: Dictionary formatted as {"partition_key": "value_of_row_to_delete"}
-        :param boto3.dynamodb.conditions.ComparisonCondition condition: Optional condition to apply to this deletion.
-        :param str condition_failure_message: If the conditional check fails, this optional error message
-        will be displayed
-        to the user.
+        :param dict primary_key: Dictionary formatted as {"primary_key": "value_of_row_to_delete"}
         :return: Success
         :rtype: dict
         """
         # Get user
         user = self.initialize_request(request)
 
-        # Build default conditional failure message
-        if condition:
-            default_condition_message = 'Conditional check failed'
-        else:
-            default_condition_message = 'Item does not exist'
-
-        # Default conditional expression to make sure the item actually exists
-        for key, value in partition_key.items():
-            cond = Attr(key).eq(value)
-            if condition:
-                condition &= cond
-            else:
-                condition = cond
+        # TODO: Default conditional expression to make sure the item actually exists
 
         # Add in the user's permissions
-        user_conditions = self.filtering.filter(user)
-        if user_conditions:
-            if condition:
-                condition &= user_conditions
-            else:
-                condition = user_conditions
+        filtering = GCPFiltering(self.data_table)
+        filtering.filter(user)
 
         # Perform the deletion
         try:
-            self.data_table.delete_item(Key=partition_key, ConditionExpression=condition)
-            logger.info('[%(user)s] Successfully deleted record "%(partition_key)s"' % {
+            self.data_table.document(primary_key[self.config.primary_key]).delete()
+            logger.info('[%(user)s] Successfully deleted record "%(primary_key)s"' % {
                 'user': self.user_identifier(user),
-                'partition_key': partition_key,
+                'primary_key': primary_key,
             })
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                logger.warning(
-                    '[%(user)s] Unable to delete record "%(partition_key)s" because the conditional check failed' % {
-                        'user': self.user_identifier(user),
-                        'partition_key': partition_key
-                    }
-                )
-                raise BadRequestException(condition_failure_message or default_condition_message)
-            logger.error(
-                '[%(user)s] Encountered error while attempting to delete record '
-                '"%(partition_key)s": [%(code)s] %(error)s' % {
-                    'user': self.user_identifier(user),
-                    'partition_key': partition_key,
-                    'code': e.response['Error']['Code'],
-                    'error': e.response['Error']['Message'],
-                }
-            )
-            raise
         except Exception as e:
             logger.error(
-                '[%(user)s] Encountered error while attempting to delete record "%(partition_key)s": %(error)s' % {
+                '[%(user)s] Encountered error while attempting to delete record "%(primary_key)s": %(error)s' % {
                     'user': self.user_identifier(user),
-                    'partition_key': partition_key,
+                    'primary_key': primary_key,
                     'error': str(e)
                 }
             )
             raise
 
         if has_sentry:
-            sentry_sdk.add_breadcrumb(category='data', message='Deleted item from Dynamo', level='info')
+            sentry_sdk.add_breadcrumb(category='data', message='Deleted item', level='info')
 
         # Create audit log
         self.audit_log(
             action='DELETE',
             request=request,
             user=user,
-            resource=partition_key,
+            resource=primary_key,
         )
 
         # Return updated record

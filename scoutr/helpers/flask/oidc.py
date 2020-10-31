@@ -62,6 +62,6 @@ def build_oidc_request(api: BaseAPI, request: APIRequest) -> Request:
         req.query_params = query_params
 
     if request.data:
-        req.body = request.body
+        req.body = request.data
 
     return req

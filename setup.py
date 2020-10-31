@@ -27,6 +27,14 @@ setup(
             'Flask~=1.1.1',
             'simplejson>=3.16,<3.18'
         ],
+        'dynamo': [
+            'boto3>=1.12.39,<1.17.0',
+            'boto3-stubs[dynamodb]'
+        ],
+        'firestore': [
+            'google==3.0.0',
+            'firebase-admin==4.4.0',
+        ],
         'docs': [
             'mkdocs',
             'mkdocs-material'

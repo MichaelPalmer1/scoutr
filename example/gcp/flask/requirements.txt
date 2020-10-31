@@ -1,0 +1,7 @@
+flask
+flask-api
+uwsgi
+firebase-admin
+simplejson
+sentry-sdk[flask]
+scoutr

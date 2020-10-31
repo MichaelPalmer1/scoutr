@@ -1,4 +1,4 @@
-service: YOUR-API-NAME
+service: scoutr-python
 
 provider:
   name: aws

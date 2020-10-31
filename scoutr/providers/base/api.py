@@ -77,6 +77,7 @@ class BaseAPI:
             is_user = False
         else:
             user = auth
+            user.id = user_id
 
         # Try to find supplied entitlements in the auth table
         entitlement_ids: List[str] = []
@@ -388,5 +389,5 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def delete(self, request: Request, partition_key: dict):
+    def delete(self, request: Request, partition_key: dict) -> dict:
         raise NotImplementedError
