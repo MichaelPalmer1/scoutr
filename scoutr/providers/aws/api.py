@@ -633,7 +633,7 @@ class DynamoAPI(BaseAPI):
         # Return the filtered response
         return self.post_process(output, user)
 
-    def delete(self, request: Request, partition_key: dict, condition=None, condition_failure_message=''):
+    def delete(self, request: Request, partition_key: dict, condition=None, condition_failure_message='') -> dict:
         """
         Delete an item from Dynamo
 

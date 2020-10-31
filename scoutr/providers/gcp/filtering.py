@@ -2,6 +2,7 @@ import json
 
 from google.cloud.firestore_v1 import Query, CollectionReference
 
+from scoutr.exceptions import BadRequestException
 from scoutr.providers.base.filtering import Filtering
 
 
