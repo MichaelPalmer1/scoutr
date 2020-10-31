@@ -1,7 +1,12 @@
+import os
+
 # import sentry_sdk
+import firebase_admin
+from firebase_admin import credentials, firestore
 from flask import request
 # from sentry_sdk.integrations.flask import FlaskIntegration
-from scoutr.models.config import MongoConfig
+from scoutr.models.config import Config
+from scoutr.providers.gcp.api import FirestoreAPI
 from scoutr.helpers.flask.oidc import build_oidc_request
 from scoutr.helpers.flask.routes import init_flask
 from scoutr.helpers.flask.utils import flaskapi_exception_wrapper
@@ -12,24 +17,25 @@ from scoutr.helpers.flask.utils import flaskapi_exception_wrapper
 #     environment=os.getenv('ENV', 'dev'),
 #     release='PROJECT-NAME@VERSION'
 # )
-from scoutr.providers.mongo import MongoAPI
 
-config = MongoConfig(
-    data_table='scoutr_data',
-    auth_table='scoutr_auth',
-    group_table='scoutr_groups',
-    audit_table='scoutr_audit',
+config = Config(
+    data_table='data',
+    auth_table='auth',
+    group_table='groups',
+    audit_table='audit',
     primary_key='id',
     oidc_username_header='Oidc-Claim-Sub',
     oidc_name_header='Oidc-Claim-Name',
     oidc_email_header='Oidc-Claim-Mail',
-    oidc_group_header='Oidc-Claim-Groups',
-    database='scoutr',
-    connection_string='mongodb://localhost'
+    oidc_group_header='Oidc-Claim-Groups'
 )
 
+# Initialize credentials
+cred = credentials.Certificate('/home/scoutr/gcp.json')
+firebase_admin.initialize_app(cred)
+
 # Create Scoutr instance
-api = MongoAPI(config)
+api = FirestoreAPI(config)
 app = init_flask(
     api=api,
     primary_list_endpoint='/items/',
