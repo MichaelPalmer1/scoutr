@@ -295,7 +295,7 @@ class MongoAPI(BaseAPI):
         params.update(request.query_params)
         params.update(request.path_params)
 
-        # Generate dynamo search
+        # Generate dynamic search
         search_key = request.path_params.get('search_key')
         search_value = request.path_params.get('search_value')
         if search_key and search_value:
@@ -304,10 +304,12 @@ class MongoAPI(BaseAPI):
             del params['search_key']
             del params['search_value']
 
+        # Build filters
         conditions = self.filtering.filter(user, params)
         if conditions is None:
             conditions = {}
 
+        # Perform the query
         data = []
         for record in self.data_table.find(conditions):
             # Exclude _id field

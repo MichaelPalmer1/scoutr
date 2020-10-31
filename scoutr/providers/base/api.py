@@ -279,6 +279,7 @@ class BaseAPI:
             user=AuditUser(
                 id=user.id,
                 name=user.name,
+                email=user.email,
                 username=user.username,
                 source_ip=request.source_ip,
                 user_agent=request.user_agent,
