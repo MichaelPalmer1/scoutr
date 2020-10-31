@@ -157,18 +157,12 @@ class BaseAPI:
                 raise UnauthorizedException(f"User '{user.id}' field 'exclude_fields' must be a list of strings")
 
         # Validate filter fields
-        for item in user.filter_fields:
-            if not isinstance(item, list):
-                raise UnauthorizedException(
-                    f"User '{user.id}' field 'filter_fields' must be a list of lists of dictionaries with each item "
-                    "formatted as {'field': 'field_name', 'value': 'value'}"
-                )
-            for sub_item in item:
-                if not isinstance(sub_item, dict) or 'field' not in sub_item or 'value' not in sub_item:
-                    raise UnauthorizedException(
-                        f"User '{user.id}' field 'filter_fields' must be a list of lists of dictionaries with each "
-                        "item formatted as {'field': 'field_name', 'value': 'value'}"
-                    )
+        # for item in user.filter_fields:
+        #     if not isinstance(item, FilterField) or 'field' not in item or 'value' not in item:
+        #         raise UnauthorizedException(
+        #             f"User '{user.id}' field 'filter_fields' must be a list of dictionaries with each "
+        #             "item formatted as {'field': 'field_name', 'value': 'value'}"
+        #         )
 
         # Make sure all the endpoints are valid regex
         for item in user.permitted_endpoints:

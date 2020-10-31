@@ -21,7 +21,11 @@ config = Config(
     auth_table='auth',
     group_table='groups',
     audit_table='audit',
-    primary_key='id'
+    primary_key='id',
+    oidc_username_header='Oidc-Claim-Sub',
+    oidc_name_header='Oidc-Claim-Name',
+    oidc_email_header='Oidc-Claim-Mail',
+    oidc_group_header='Oidc-Claim-Groups'
 )
 
 api = DynamoAPI(config)

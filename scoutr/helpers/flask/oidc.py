@@ -28,7 +28,10 @@ def get_user_from_oidc(api: BaseAPI, request: APIRequest) -> RequestUser:
 
     if api.config.oidc_group_header:
         group_string = request.headers.get(api.config.oidc_group_header, '')
-        groups = group_string.split(',')
+        if group_string == '':
+            groups = []
+        else:
+            groups = group_string.split(',')
 
     user_data = UserData(
         name=request.headers.get(api.config.oidc_username_header),

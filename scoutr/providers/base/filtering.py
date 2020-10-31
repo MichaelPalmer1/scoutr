@@ -1,7 +1,7 @@
 import re
 from abc import abstractmethod
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 from urllib.parse import unquote_plus
 
 from scoutr.exceptions import BadRequestException
@@ -38,7 +38,21 @@ class Filtering:
         :return: Supported operations
         :rtype: dict
         """
-        return {}
+        return {
+            self.OPERATION_EQUAL: self.equals,
+            self.OPERATION_NOT_EQUAL: self.not_equal,
+            self.OPERATION_CONTAINS: self.contains,
+            self.OPERATION_NOT_CONTAINS: self.not_contains,
+            self.OPERATION_STARTS_WITH: self.starts_with,
+            self.OPERATION_EXISTS: self.exists,
+            self.OPERATION_GREATER_THAN: self.greater_than,
+            self.OPERATION_LESS_THAN: self.less_than,
+            self.OPERATION_GREATER_THAN_EQUAL: self.greater_than_equal,
+            self.OPERATION_LESS_THAN_EQUAL: self.less_than_equal,
+            self.OPERATION_BETWEEN: self.between,
+            self.OPERATION_IN: self.is_in,
+            self.OPERATION_NOT_IN: self.not_in
+        }
 
     @abstractmethod
     def And(self, condition1, condition2):
@@ -104,26 +118,24 @@ class Filtering:
         if not user:
             return
 
-        conditions = None
+        # Merge all possible values for this filter key together
+        filters: Dict[str, List] = {}
         for item in user.filter_fields:
-            user_conditions = None
-            if isinstance(item.value, list):
-                try:
-                    condition = self.is_in(item.field, item.value)
-                except NotImplementedError:
-                    raise BadRequestException(
-                        'Failed to generate user condition - IN operation is not supported by this provider.'
-                    )
-                user_conditions = self.And(user_conditions, condition)
-            elif isinstance(item.value, str):
-                condition = self.equals(item.field, item.value)
-                user_conditions = self.And(user_conditions, condition)
-            else:
-                print('Received value of unknown type', item.value)
-                print('Type', type(item.value))
-                continue
+            filters.setdefault(item.field, list())
+            filters[item.field].append(item.value)
 
-            conditions = self.Or(conditions, user_conditions)
+        # Perform the filter
+        conditions = None
+        for key, values in filters.items():
+            if len(values) == 1:
+                # Perform a single query
+                conditions = self.perform_filter(conditions, key, values[0])
+            elif len(values) > 1:
+                # Perform an OR query against all possible values for this key
+                filter_conds = None
+                for value in values:
+                    filter_conds = self.Or(filter_conds, self.perform_filter(None, key, value))
+                conditions = self.And(conditions, filter_conds)
 
         return conditions
 
@@ -152,9 +164,10 @@ class Filtering:
 
     def perform_filter(self, conditions: Any, key: str, value: Any) -> Any:
         condition = None
-        value = unquote_plus(value)
-        if value == '':
-            raise BadRequestException('Filter key %s has no value' % key)
+        if isinstance(value, str):
+            value = unquote_plus(value)
+            if value == '':
+                raise BadRequestException('Filter key %s has no value' % key)
 
         # Check if this is a magic operator
         magic_operator_match = re.match('^(.+)__(.+)$', key)
@@ -163,21 +176,24 @@ class Filtering:
             operation = magic_operator_match.group(2)
 
             # Convert to decimal if this is a numeric operation
-            if value.isnumeric() and operation in self.NUMERIC_OPERATIONS:
+            if isinstance(value, str) and value.isnumeric() and operation in self.NUMERIC_OPERATIONS:
                 value = Decimal(value)
 
             # Fetch condition function from operation map
             func = self.operations().get(operation)
 
-            if func is not None:
+            try:
+                if func is None:
+                    raise NotImplementedError
+
                 # Run the condition function
                 result = func(key, value)
 
                 # If result is null, do not apply the condition
                 if result is not None:
                     condition = result
-            else:
-                raise BadRequestException(f"Unsupported magic operator '{operation}")
+            except NotImplementedError:
+                raise BadRequestException(f"Provider does not support magic operator '{operation}")
 
         else:
             # No magic operator matches - using equals operation

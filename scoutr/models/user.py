@@ -6,7 +6,13 @@ from scoutr.models import Model
 
 class FilterField(Model):
     field: str
-    value: Any
+    value: Union[List, str]
+
+    @classmethod
+    def load(cls, data: Dict[str, Any]):
+        if 'field' not in data or 'value' not in data:
+            raise InvalidUserException('Invalid entry on user filter fields')
+        return cls(**data)
 
 
 class PermittedEndpoints(Model):
@@ -26,12 +32,12 @@ class PermittedEndpoints(Model):
 
 class Permissions(Model):
     permitted_endpoints: List[PermittedEndpoints] = []
-    filter_fields: List[List[FilterField]] = []
+    filter_fields: List[FilterField] = []
     exclude_fields: List[str] = []
     update_fields_permitted: List[str] = []
     update_fields_restricted: List[str] = []
 
-    def __init__(self, permitted_endpoints: List[Dict[str, str]] = None, filter_fields: List[List[dict]] = None,
+    def __init__(self, permitted_endpoints: List[Dict[str, str]] = None, filter_fields: List[dict] = None,
                  exclude_fields: List[str] = None, update_fields_permitted: List[str] = None,
                  update_fields_restricted: List[str] = None, **kwargs):
         super(Permissions, self).__init__(**kwargs)
@@ -48,10 +54,7 @@ class Permissions(Model):
             update_fields_restricted = []
 
         for item in filter_fields:
-            fields = []
-            for sub_item in item:
-                fields.append(FilterField.load(sub_item))
-            self.filter_fields.append(fields)
+            self.filter_fields.append(FilterField.load(item))
 
         for item in permitted_endpoints:
             self.permitted_endpoints.append(PermittedEndpoints.load(item))
