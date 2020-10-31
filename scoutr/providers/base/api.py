@@ -1,7 +1,7 @@
 import re
 from abc import abstractmethod
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Any, Callable, Union
+from typing import List, Dict, Optional, Any, Callable, Union, Tuple
 
 from scoutr.exceptions import UnauthorizedException, BadRequestException, ForbiddenException
 from scoutr.models.audit import AuditLog, AuditUser
@@ -193,8 +193,8 @@ class BaseAPI:
         raise ForbiddenException(f'Not authorized to perform {req.method} on endpoint {req.path}')
 
     @staticmethod
-    def validate_fields(validation: dict, item: dict, existing_item: Optional[dict] = None,
-                        ignore_field_presence: bool = False):
+    def validate_fields(validation: dict, required_fields: Union[List, Tuple], item: dict,
+                        existing_item: Optional[dict] = None):
         """
         Perform field validation before creating/updating items into Dynamo
 
@@ -222,15 +222,17 @@ class BaseAPI:
             This dictionary format allows for customizing the error message returned to the user.
 
         :param dict validation: Dictionary that maps fields to their validation callables
+        :param list required_fields: List of fields that should be required
         :param dict item: Data that should be validated
         :param dict existing_item: Existing item in Dynamo
-        :param bool ignore_field_presence: If True and a field specified in `field_validation` does not exist in
-        `data`, this will raise a BadRequestException. If False, missing fields will be ignored.
         :raises: BadRequestException
         """
+        if validation is None:
+            validation = {}
+
         # Check for required fields
-        if not ignore_field_presence:
-            missing_keys = set(validation.keys()).difference(set(item.keys()))
+        if required_fields:
+            missing_keys = set(required_fields).difference(set(item.keys()))
             if missing_keys:
                 raise BadRequestException('Missing required fields %s' % missing_keys)
 
@@ -357,7 +359,8 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def create(self, request: Request, data: dict, validation: dict) -> dict:
+    def create(self, request: Request, data: dict, validation: dict,
+               required_fields: Union[List, Tuple]) -> dict:
         raise NotImplementedError
 
     @abstractmethod
@@ -373,7 +376,8 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def list_unique_values(self, request: Request, key: str, unique_func: Callable[[List[Dict], str], List[str]]) -> List[str]:
+    def list_unique_values(self, request: Request, key: str,
+                           unique_func: Callable[[List[Dict], str], List[str]]) -> List[str]:
         raise NotImplementedError
 
     @abstractmethod
@@ -381,7 +385,8 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def history(self, request: Request, key: str, value: str, actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
+    def history(self, request: Request, key: str, value: str,
+                actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
         raise NotImplementedError
 
     @abstractmethod

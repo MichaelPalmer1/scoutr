@@ -1,7 +1,7 @@
 import json
 import logging
 from copy import deepcopy
-from typing import List, Dict, Optional, Any, Callable
+from typing import List, Dict, Optional, Any, Callable, Tuple, Union
 
 import boto3
 import mypy_boto3_dynamodb as dynamodb
@@ -39,7 +39,7 @@ class DynamoAPI(BaseAPI):
 
     def get_auth(self, user_id: str) -> Optional[User]:
         # Try to find user in the auth table
-        result: dict = self.auth_table.get_item(Key={'id': user_id})
+        result: Dict = self.auth_table.get_item(Key={'id': user_id})
 
         if not result.get('Item'):
             return None
@@ -76,7 +76,8 @@ class DynamoAPI(BaseAPI):
             items.extend(response['Items'])
         return items
 
-    def create(self, request: Request, data: dict, validation: dict = None) -> dict:
+    def create(self, request: Request, data: dict, validation: dict = None,
+               required_fields: Union[List, Tuple] = ()) -> dict:
         """
         Create an item in Dynamo
 
@@ -84,6 +85,7 @@ class DynamoAPI(BaseAPI):
         :param dict data: Item to create
         :param dict validation: Optional dictionary containing mappings of field name to callable. See the docstring
         in the _validate_fields method for more information.
+        :param list required_fields: Optional list of required fields
         :return: Created item
         :rtype: dict
         """
@@ -97,7 +99,7 @@ class DynamoAPI(BaseAPI):
 
         # Check that required fields have values
         if validation:
-            self.validate_fields(validation, data)
+            self.validate_fields(validation, required_fields, data)
             if has_sentry:
                 sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
 
@@ -116,7 +118,7 @@ class DynamoAPI(BaseAPI):
                     raise BadRequestException(f'Unauthorized value for field {key}')
 
         # Build condition to ensure the unique key does not exist
-        resource = {}
+        resource: Dict[str, str] = {}
         conditions = None
         for schema in self.data_table.key_schema:
             condition = Attr(schema['AttributeName']).not_exists()
@@ -173,9 +175,9 @@ class DynamoAPI(BaseAPI):
         # Create audit log
         self.audit_log(action='CREATE', resource=resource, request=request, user=user)
 
-        return {'created': True}
+        return resource
 
-    def update(self, request: Request, partition_key: dict, data: dict, validation: dict, condition=None,
+    def update(self, request: Request, partition_key: dict, data: dict, validation: dict = None, condition=None,
                condition_failure_message='', audit_action='UPDATE') -> dict:
         """
         Update an item in Dynamo
@@ -185,6 +187,7 @@ class DynamoAPI(BaseAPI):
         :param dict data: Fields to update, formatted as {"key": "value"}
         :param dict validation: Optional dictionary containing mappings of field name to callable. See the
         docstring in the _validate_fields method for more information.
+        :param list required_fields: List of required fields
         :param dict condition: Optional condition expression to apply to this update. If the condition fails to return
         successful, then this item will not be updated in Dynamo.
         :param str condition_failure_message: If the conditional check fails, this optional error message
@@ -258,9 +261,9 @@ class DynamoAPI(BaseAPI):
         if validation:
             self.validate_fields(
                 validation=validation,
+                required_fields=[],
                 item=data,
-                existing_item=existing_item,
-                ignore_field_presence=True
+                existing_item=existing_item
             )
             if has_sentry:
                 sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
