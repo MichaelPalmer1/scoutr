@@ -239,6 +239,8 @@ class BaseAPI:
             if missing_keys:
                 raise BadRequestException('Missing required fields %s' % missing_keys)
 
+        sentry_sdk.add_breadcrumb(category='validate', message='Validated required fields were included', level='info')
+
         # Perform field validation
         for key, func in validation.items():
             if key in item:
@@ -253,6 +255,8 @@ class BaseAPI:
                 elif not response:
                     raise BadRequestException("Invalid value for key '%s'" % key)
 
+        sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
+
     def _prepare_create(self, request: Request, data: dict, validation: dict = None,
                         required_fields: Union[List, Tuple] = ()) -> User:
         # Get user
@@ -265,7 +269,6 @@ class BaseAPI:
 
         # Run validation
         self.validate_fields(validation, required_fields, data)
-        sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
 
         # FIXME: Creation filters
         # for filter_field in user.filter_fields:

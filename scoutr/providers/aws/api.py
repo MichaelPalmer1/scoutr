@@ -218,7 +218,7 @@ class DynamoAPI(BaseAPI):
         if validation:
             self.validate_fields(
                 validation=validation,
-                required_fields=[],
+                required_fields=(),
                 item=data,
                 existing_item=existing_item
             )
