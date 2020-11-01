@@ -57,7 +57,13 @@ class MongoFiltering(Filtering):
             attr: {'$regex': f'^(?:(?!{value}).)*$'}
         }
 
-    def has_elements(self, attr: str, value):
+    def starts_with(self, attr: str, value):
+        return {
+            attr: {'$regex': f'^{value}.*'}
+        }
+
+    @staticmethod
+    def has_elements(attr: str, value):
         values = json.loads(value)
 
         if isinstance(values, list):
@@ -134,12 +140,14 @@ class MongoFiltering(Filtering):
         else:
             raise Exception('Invalid value for exists operation')
 
-    def is_type(self, attr: str, value):
+    @staticmethod
+    def is_type(attr: str, value):
         return {
             attr: {'$type': value}
         }
 
-    def regex(self, attr: str, value):
+    @staticmethod
+    def regex(attr: str, value):
         return {
             attr: {'$regex': value}
         }

@@ -35,26 +35,9 @@ class MongoAPI(BaseAPI):
         self.group_table = self.db.get_collection(self.config.group_table)
         self.audit_table = self.db.get_collection(self.config.audit_table)
 
-    #     # Configure indices
-    #     self.setup_indices()
-    #
-    # def setup_indices(self):
-    #     found = False
-    #     for key, value in self.data_table.index_information().items():
-    #         # Look for the primary key
-    #         if value.get('key') == [(self.config.primary_key, 1)]:
-    #             if value.get('unique', False) is True:
-    #                 found = True
-    #                 break
-    #
-    #     if not found:
-    #         # Create index
-    #         print(f'Creating unique index for {self.config.primary_key} on collection {self.config.data_table}')
-    #         self.data_table.create_index(self.config.primary_key, unique=True)
-
     def get_auth(self, user_id: str) -> Optional[User]:
         # Try to find user in the auth table
-        result = self.auth_table.find_one({'id': user_id})
+        result = self.auth_table.find_one(user_id)
 
         if not result:
             return None
@@ -64,7 +47,7 @@ class MongoAPI(BaseAPI):
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table
-        result = self.group_table.find_one({'id': group_id})
+        result = self.group_table.find_one(group_id)
 
         if not result:
             return None
@@ -185,7 +168,7 @@ class MongoAPI(BaseAPI):
         self.validate_update(user, data)
 
         # Add in the user's permissions
-        conditions = self.filtering.filter(user, {self.config.primary_key: primary_key[self.config.primary_key]})
+        conditions = self.filtering.filter(user, {'_id': primary_key[self.config.primary_key]})
 
         # Get the existing item
         existing_item = self.data_table.find_one(conditions)
@@ -487,7 +470,7 @@ class MongoAPI(BaseAPI):
         # Add in the user's permissions
         conditions = self.filtering.And(
             self.filtering.filter(user),
-            self.filtering.equals(self.config.primary_key, primary_key[self.config.primary_key])
+            self.filtering.equals('_id', primary_key[self.config.primary_key])
         )
 
         # Perform the deletion

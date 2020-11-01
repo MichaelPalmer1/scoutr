@@ -32,7 +32,7 @@ class FirestoreAPI(BaseAPI):
 
     def get_auth(self, user_id: str) -> Optional[User]:
         # Try to find user in the auth table
-        result: DocumentSnapshot = self.auth_table.document(user_id).get()
+        result = self.auth_table.document(user_id).get()
 
         if not result.exists:
             return None
@@ -42,7 +42,7 @@ class FirestoreAPI(BaseAPI):
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table
-        result: DocumentSnapshot = self.group_table.document(group_id).get()
+        result = self.group_table.document(group_id).get()
 
         if not result.exists:
             return None
