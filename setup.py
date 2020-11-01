@@ -17,9 +17,9 @@ setup(
         'setuptools_scm>=3.3.3,<4.2.0'
     ],
     install_requires=[
-        'boto3>=1.12.39,<1.17.0',
+        # 'boto3>=1.12.39,<1.17.0',
         'mypy',
-        'boto3-stubs[dynamodb]'
+        # 'boto3-stubs[dynamodb]'
     ],
     extras_require={
         'flask': [
@@ -28,12 +28,16 @@ setup(
             'simplejson>=3.16,<3.18'
         ],
         'dynamo': [
-            'boto3>=1.12.39,<1.17.0',
+            'boto3~=1.14.37',
+            'botocore~=1.17.37',
             'boto3-stubs[dynamodb]'
         ],
         'firestore': [
-            'google==3.0.0',
-            'firebase-admin==4.4.0',
+            'google~=3.0.0',
+            'firebase-admin~=4.4.0',
+        ],
+        'mongo': [
+            'pymongo~=3.11.0'
         ],
         'docs': [
             'mkdocs',

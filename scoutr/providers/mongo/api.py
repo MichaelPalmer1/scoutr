@@ -1,7 +1,7 @@
 import json
 import logging
 from copy import deepcopy
-from typing import List, Dict, Optional, Any, Callable, Union, Tuple
+from typing import List, Optional, Any, Callable, Union, Tuple
 
 from bson import ObjectId
 from pymongo import MongoClient
@@ -16,9 +16,9 @@ from scoutr.providers.mongo.filtering import MongoFiltering
 
 try:
     import sentry_sdk
-    has_sentry = True
 except ImportError:
-    has_sentry = False
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -107,8 +107,7 @@ class MongoAPI(BaseAPI):
         # Check that required fields have values
         if validation:
             self.validate_fields(validation, required_fields, data)
-            if has_sentry:
-                sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
+            sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
 
         # FIXME: Build creation filters
         # for filter_field in user.filter_fields:
@@ -148,7 +147,7 @@ class MongoAPI(BaseAPI):
                 'user': self.user_identifier(user),
                 'item': data
             })
-        except DuplicateKeyError as e:
+        except DuplicateKeyError:
             raise BadRequestException(f"An item with id '{document_id}' already exists")
 
         except Exception as e:
@@ -161,8 +160,7 @@ class MongoAPI(BaseAPI):
             )
             raise
 
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(category='data', message='Created item in Firestore', level='info')
+        sentry_sdk.add_breadcrumb(category='data', message='Created item in Firestore', level='info')
 
         # Create audit log
         self.audit_log(action='CREATE', resource=resource, request=request, user=user)
@@ -174,7 +172,7 @@ class MongoAPI(BaseAPI):
         Update an item in Dynamo
 
         :param Request request: Request object
-        :param dict primary_key: Dictionary formatted as {"partition_key": "value_of_row_to_update"}
+        :param dict primary_key: Dictionary formatted as {"primary_key": "value_of_row_to_update"}
         :param dict data: Fields to update, formatted as {"key": "value"}
         :param dict validation: Optional dictionary containing mappings of field name to callable. See the
         docstring in the _validate_fields method for more information.
@@ -196,19 +194,8 @@ class MongoAPI(BaseAPI):
         if self.config.primary_key in data:
             raise BadRequestException('Primary key %s cannot be updated' % self.config.primary_key)
 
-        # Make sure the user has permission to update all of the fields specified
-        if user.update_fields_permitted:
-            # User is only permitted to update specified list of fields. Determine list of fields the user
-            # is not authorized to update
-            unauthorized_fields = set(data.keys()).difference(set(user.update_fields_permitted))
-            if unauthorized_fields:
-                raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
-        elif user.update_fields_restricted:
-            # User is restricted from updating certain fields. Determine list of fields the user
-            # is not authorized to update.
-            unauthorized_fields = set(data.keys()).intersection(set(user.update_fields_restricted))
-            if unauthorized_fields:
-                raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
+        # Validate update
+        self.validate_update(user, data)
 
         # Add in the user's permissions
         conditions = self.filtering.filter(user, {self.config.primary_key: primary_key[self.config.primary_key]})
@@ -216,10 +203,10 @@ class MongoAPI(BaseAPI):
         # Get the existing item
         existing_item = self.data_table.find_one(conditions)
         if len(existing_item) == 0:
-            logger.info('[%(user)s] Primary key "%(partition_key)s" does not exist or user does '
+            logger.info('[%(user)s] Primary key "%(primary_key)s" does not exist or user does '
                         'not have permission to access it' % {
                             'user': self.user_identifier(user),
-                            'partition_key': primary_key
+                            'primary_key': primary_key
                         })
             raise NotFoundException('Item does not exist or you do not have permission to access it')
         elif len(existing_item) > 1:
@@ -237,33 +224,31 @@ class MongoAPI(BaseAPI):
                 item=data,
                 existing_item=existing_item
             )
-            if has_sentry:
-                sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
+            sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
 
         # Perform the update item call
         try:
             document_id = primary_key[self.config.primary_key]
             self.data_table.update_one(conditions, {'$set': data})
             response = self.data_table.find_one({primary_key: document_id})
-            logger.info('[%(user)s] Successfully updated record "%(partition_key)s" with values:\n%(item)s' % {
+            logger.info('[%(user)s] Successfully updated record "%(primary_key)s" with values:\n%(item)s' % {
                 'user': self.user_identifier(user),
-                'partition_key': primary_key,
+                'primary_key': primary_key,
                 'item': data
             })
         except Exception as e:
             logger.error(
                 '[%(user)s] Encountered error while attempting to update record '
-                '"%(partition_key)s": %(error)s. Item:\n%(item)s' % {
+                '"%(primary_key)s": %(error)s. Item:\n%(item)s' % {
                     'user': self.user_identifier(user),
-                    'partition_key': primary_key,
+                    'primary_key': primary_key,
                     'error': str(e),
                     'item': data
                 }
             )
             raise
 
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(category='data', message='Updated item in Dynamo', level='info')
+        sentry_sdk.add_breadcrumb(category='data', message='Updated item in Dynamo', level='info')
 
         # Create audit log
         self.audit_log(action=audit_action, resource=primary_key, changes=data, request=request, user=user)
@@ -302,10 +287,9 @@ class MongoAPI(BaseAPI):
         if isinstance(data['_id'], ObjectId):
             data['_id'] = str(data['_id'])
 
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(
-                category='query', message='%s = %s' % (key, value), level='info', table=self.config.data_table
-            )
+        sentry_sdk.add_breadcrumb(
+            category='query', message='%s = %s' % (key, value), level='info', table=self.config.data_table
+        )
 
         # Filter the response
         output = self.post_process([data], user)
@@ -329,22 +313,7 @@ class MongoAPI(BaseAPI):
         :return: Data from the table
         :rtype: dict
         """
-        # Get user
-        user = self.initialize_request(request)
-
-        # Build params
-        params: Dict[str, str] = {}
-        params.update(request.query_params)
-        params.update(request.path_params)
-
-        # Generate dynamic search
-        search_key = request.path_params.get('search_key')
-        search_value = request.path_params.get('search_value')
-        if search_key and search_value:
-            # Map the search key and value into params
-            params[search_key] = search_value
-            del params['search_key']
-            del params['search_value']
+        user, params = self._prepare_list(request)
 
         # Build filters
         conditions = self.filtering.filter(user, params)
@@ -371,20 +340,11 @@ class MongoAPI(BaseAPI):
 
     def list_unique_values(self, request: Request, key: str,
                            unique_func: Callable[[List, str], List[str]] = lambda items, _: sorted(items)) -> List[str]:
-        # Get the user
-        user = self.initialize_request(request)
-
-        # Combine filter parameters
-        params: Dict[str, str] = {}
-        params.update(request.query_params)
-        params.update(request.path_params)
+        user, params = self._prepare_list(request, False)
 
         # Build filters
-        conditions = self.filtering.filter(user, params)
-
-        # Add field existence condition
         conditions = self.filtering.And(
-            conditions,
+            self.filtering.filter(user, params),
             self.filtering.exists(key, 'true')
         )
 
@@ -471,20 +431,20 @@ class MongoAPI(BaseAPI):
             raise
 
         # Add sentry breadcrumb
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(
-                category='query',
-                message='Scanned table',
-                level='info',
-                table=self.config.audit_table
-            )
+        sentry_sdk.add_breadcrumb(
+            category='query',
+            message='Scanned table',
+            level='info',
+            table=self.config.audit_table
+        )
 
         # Sort the data
         data = sorted(data, key=lambda item: item['time'], reverse=True)
 
         return data
 
-    def history(self, request: Request, key: str, value: str, actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
+    def history(self, request: Request, key: str, value: str,
+                actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
         """
         Given a resource key and value, build the history of the item over time.
 
@@ -504,7 +464,7 @@ class MongoAPI(BaseAPI):
         }
 
         # Get user
-        user = self.initialize_request(request)
+        self.initialize_request(request)
 
         # Get the audit logs (reverse results so oldest item is first)
         logs = self.list_audit_logs(request, param_overrides)[::-1]
@@ -563,8 +523,7 @@ class MongoAPI(BaseAPI):
 
         # Build multi-value filter expressions
         multi_filters = self.filtering.multi_filter(user, key, values)
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(category='data', message='Built multi-value filter', level='info')
+        sentry_sdk.add_breadcrumb(category='data', message='Built multi-value filter', level='info')
 
         # Perform each generated filter and then combine the results together
         output = []
@@ -626,8 +585,7 @@ class MongoAPI(BaseAPI):
             )
             raise
 
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(category='data', message='Deleted item', level='info')
+        sentry_sdk.add_breadcrumb(category='data', message='Deleted item', level='info')
 
         # Create audit log
         self.audit_log(

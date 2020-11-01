@@ -17,9 +17,9 @@ from scoutr.providers.base.api import BaseAPI
 
 try:
     import sentry_sdk
-    has_sentry = True
 except ImportError:
-    has_sentry = False
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -39,7 +39,7 @@ class DynamoAPI(BaseAPI):
 
     def get_auth(self, user_id: str) -> Optional[User]:
         # Try to find user in the auth table
-        result: Dict = self.auth_table.get_item(Key={'id': user_id})
+        result = self.auth_table.get_item(Key={'id': user_id})
 
         if not result.get('Item'):
             return None
@@ -49,7 +49,7 @@ class DynamoAPI(BaseAPI):
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table
-        result: dict = self.group_table.get_item(Key={'group_id': group_id})
+        result = self.group_table.get_item(Key={'group_id': group_id})
 
         if not result.get('Item'):
             return None
@@ -100,8 +100,7 @@ class DynamoAPI(BaseAPI):
         # Check that required fields have values
         if validation:
             self.validate_fields(validation, required_fields, data)
-            if has_sentry:
-                sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
+            sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
 
         # FIXME: Build creation filters
         # for filter_field in user.filter_fields:
@@ -168,8 +167,7 @@ class DynamoAPI(BaseAPI):
             )
             raise
 
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(category='data', message='Created item in Dynamo', level='info')
+        sentry_sdk.add_breadcrumb(category='data', message='Created item in Dynamo', level='info')
 
         # Create audit log
         self.audit_log(action='CREATE', resource=resource, request=request, user=user)
@@ -186,7 +184,6 @@ class DynamoAPI(BaseAPI):
         :param dict data: Fields to update, formatted as {"key": "value"}
         :param dict validation: Optional dictionary containing mappings of field name to callable. See the
         docstring in the _validate_fields method for more information.
-        :param list required_fields: List of required fields
         :param dict condition: Optional condition expression to apply to this update. If the condition fails to return
         successful, then this item will not be updated in Dynamo.
         :param str condition_failure_message: If the conditional check fails, this optional error message
@@ -218,19 +215,8 @@ class DynamoAPI(BaseAPI):
             else:
                 base_conditions = cond
 
-        # Make sure the user has permission to update all of the fields specified
-        if user.update_fields_permitted:
-            # User is only permitted to update specified list of fields. Determine list of fields the user
-            # is not authorized to update
-            unauthorized_fields = set(data.keys()).difference(set(user.update_fields_permitted))
-            if unauthorized_fields:
-                raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
-        elif user.update_fields_restricted:
-            # User is restricted from updating certain fields. Determine list of fields the user
-            # is not authorized to update.
-            unauthorized_fields = set(data.keys()).intersection(set(user.update_fields_restricted))
-            if unauthorized_fields:
-                raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
+        # Check user update permissions
+        self.validate_update(user, data)
 
         # Add in the user's permissions
         user_conditions = self.filtering.filter(user)
@@ -264,8 +250,7 @@ class DynamoAPI(BaseAPI):
                 item=data,
                 existing_item=existing_item
             )
-            if has_sentry:
-                sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
+            sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
 
         # Build the update expression
         updates = []
@@ -326,8 +311,7 @@ class DynamoAPI(BaseAPI):
             )
             raise
 
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(category='data', message='Updated item in Dynamo', level='info')
+        sentry_sdk.add_breadcrumb(category='data', message='Updated item in Dynamo', level='info')
 
         # Create audit log
         self.audit_log(action=audit_action, resource=partition_key, changes=data, request=request, user=user)
@@ -357,10 +341,9 @@ class DynamoAPI(BaseAPI):
 
         # Search for the item
         data = self._scan(self.data_table, FilterExpression=conditions)
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(
-                category='query', message='%s = %s' % (key, value), level='info', table=self.config.data_table
-            )
+        sentry_sdk.add_breadcrumb(
+            category='query', message='%s = %s' % (key, value), level='info', table=self.config.data_table
+        )
 
         # Filter the response
         output = self.post_process(data, user)
@@ -384,20 +367,7 @@ class DynamoAPI(BaseAPI):
         :return: Data from the table
         :rtype: dict
         """
-        user = self.initialize_request(request)
-
-        params: Dict[str, str] = {}
-        params.update(request.query_params)
-        params.update(request.path_params)
-
-        # Generate dynamo search
-        search_key = request.path_params.get('search_key')
-        search_value = request.path_params.get('search_value')
-        if search_key and search_value:
-            # Map the search key and value into params
-            params[search_key] = search_value
-            del params['search_key']
-            del params['search_value']
+        user, params = self._prepare_list(request)
 
         args = {}
         conditions = self.filtering.filter(user, params)
@@ -413,23 +383,13 @@ class DynamoAPI(BaseAPI):
 
     def list_unique_values(self, request: Request, key: str,
                            unique_func: Callable[[List, str], List[str]] = BaseAPI.unique_func) -> List[str]:
-        # Get the user
-        user = self.initialize_request(request)
-
-        # Combine filter parameters
-        params: Dict[str, str] = {}
-        params.update(request.query_params)
-        params.update(request.path_params)
+        user, params = self._prepare_list(request, False)
 
         # Build filters
-        conditions = self.filtering.filter(user, params)
-
-        # Add unique key existence filter
-        key_cond = Attr(key).exists()
-        if conditions:
-            conditions &= key_cond
-        else:
-            conditions = key_cond
+        conditions = self.filtering.And(
+            self.filtering.filter(user, params),
+            self.filtering.exists(key, 'true')
+        )
 
         # Download the data
         try:
@@ -517,20 +477,20 @@ class DynamoAPI(BaseAPI):
             raise
 
         # Add sentry breadcrumb
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(
-                category='query',
-                message=args.get('FilterExpression', 'Scanned table'),
-                level='info',
-                table=self.config.audit_table
-            )
+        sentry_sdk.add_breadcrumb(
+            category='query',
+            message=args.get('FilterExpression', 'Scanned table'),
+            level='info',
+            table=self.config.audit_table
+        )
 
         # Sort the data
         data = sorted(data, key=lambda item: item['time'], reverse=True)
 
         return data
 
-    def history(self, request: Request, key: str, value: str, actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
+    def history(self, request: Request, key: str, value: str,
+                actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
         """
         Given a resource key and value, build the history of the item over time.
 
@@ -550,7 +510,7 @@ class DynamoAPI(BaseAPI):
         }
 
         # Get user
-        user = self.initialize_request(request)
+        self.initialize_request(request)
 
         # Get the audit logs (reverse results so oldest item is first)
         logs = self.list_audit_logs(request, param_overrides)[::-1]
@@ -609,8 +569,7 @@ class DynamoAPI(BaseAPI):
 
         # Build multi-value filter expressions
         expressions = self.filtering.multi_filter(user, key, values)
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(category='data', message='Built multi-value filter', level='info')
+        sentry_sdk.add_breadcrumb(category='data', message='Built multi-value filter', level='info')
 
         # Perform each generated filter expression and then combine the results together
         output = []
@@ -618,10 +577,9 @@ class DynamoAPI(BaseAPI):
             # Download data
             data = self._scan(self.data_table, FilterExpression=expression)
 
-            if has_sentry:
-                sentry_sdk.add_breadcrumb(
-                    category='query', message=expression, level='info', table=self.config.data_table
-                )
+            sentry_sdk.add_breadcrumb(
+                category='query', message=expression, level='info', table=self.config.data_table
+            )
 
             # Add to output
             output.extend(data)
@@ -706,8 +664,7 @@ class DynamoAPI(BaseAPI):
             )
             raise
 
-        if has_sentry:
-            sentry_sdk.add_breadcrumb(category='data', message='Deleted item from Dynamo', level='info')
+        sentry_sdk.add_breadcrumb(category='data', message='Deleted item from Dynamo', level='info')
 
         # Create audit log
         self.audit_log(

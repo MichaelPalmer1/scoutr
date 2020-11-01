@@ -66,7 +66,7 @@ class BaseAPI:
             value = merge_lists(getattr(user, attribute), getattr(group, attribute))
             setattr(user, attribute, value)
 
-    def get_user(self, user_id: str, user_data: UserData) -> User:
+    def get_user(self, user_id: str, user_data: Optional[UserData]) -> User:
         is_user = True
         user = User(id=user_id)
 
@@ -166,9 +166,9 @@ class BaseAPI:
         #         )
 
         # Make sure all the endpoints are valid regex
-        for item in user.permitted_endpoints:
+        for permitted_endpoint in user.permitted_endpoints:
             try:
-                re.compile(item.endpoint)
+                re.compile(permitted_endpoint.endpoint)
             except Exception as e:
                 raise BadRequestException('Failed to compile endpoint regex: %s' % e)
 
@@ -244,6 +244,47 @@ class BaseAPI:
                         raise BadRequestException(response['message'])
                 elif not response:
                     raise BadRequestException("Invalid value for key '%s'" % key)
+
+    def _prepare_list(self, request: Request, process_search_keys: bool = True) -> (User, Dict[str, str]):
+        user = self.initialize_request(request)
+
+        params: Dict[str, str] = {}
+        params.update(request.query_params)
+        params.update(request.path_params)
+
+        # Generate dynamo search
+        if process_search_keys:
+            search_key = request.path_params.get('search_key')
+            search_value = request.path_params.get('search_value')
+            if search_key and search_value:
+                # Map the search key and value into params
+                params[search_key] = search_value
+                del params['search_key']
+                del params['search_value']
+
+        return user, params
+
+    @staticmethod
+    def validate_update(user: User, data: dict):
+        """
+        Make sure the user has permission to update all of the fields specified
+
+        :param User user: User object
+        :param dict data: Data object
+        :raises UnauthorizedException
+        """
+        if user.update_fields_permitted:
+            # User is only permitted to update specified list of fields. Determine list of fields the user
+            # is not authorized to update
+            unauthorized_fields = set(data.keys()).difference(set(user.update_fields_permitted))
+            if unauthorized_fields:
+                raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
+        elif user.update_fields_restricted:
+            # User is restricted from updating certain fields. Determine list of fields the user
+            # is not authorized to update.
+            unauthorized_fields = set(data.keys()).intersection(set(user.update_fields_restricted))
+            if unauthorized_fields:
+                raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
 
     def post_process(self, data: List[dict], user: User) -> List[dict]:
         # If no filtering is necessary, return output
