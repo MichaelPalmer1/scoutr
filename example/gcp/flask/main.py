@@ -36,6 +36,17 @@ app = init_flask(
 )
 
 
+@app.route('/item/<item>/', methods=['GET'])
+@flaskapi_exception_wrapper
+def get_item(item):
+    """Get an item"""
+    return api.get(
+        request=build_oidc_request(api, request),
+        key=api.config.primary_key,
+        value=item
+    )
+
+
 @app.route("/item/", methods=['POST'])
 @flaskapi_exception_wrapper
 def create_item():
@@ -43,6 +54,16 @@ def create_item():
     return api.create(
         request=build_oidc_request(api, request),
         data=request.data
+    )
+
+
+@app.route("/names/", methods=['GET'])
+@flaskapi_exception_wrapper
+def list_names():
+    """List unique values for name"""
+    return api.list_unique_values(
+        request=build_oidc_request(api, request),
+        key='name'
     )
 
 

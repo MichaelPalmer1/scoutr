@@ -5,13 +5,13 @@ from typing import List, Dict, Optional, Any, Callable, Union, Tuple
 
 from bson import ObjectId
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 
 from scoutr.exceptions import NotFoundException, BadRequestException, UnauthorizedException
-from scoutr.models.config import Config, MongoConfig
+from scoutr.models.config import MongoConfig
 from scoutr.models.request import Request
 from scoutr.models.user import User, Group
-from scoutr.providers.base.api import BaseAPI
-from scoutr.providers.gcp.filtering import GCPFiltering
+from scoutr.providers.base import BaseAPI
 from scoutr.providers.mongo.filtering import MongoFiltering
 
 try:
@@ -36,6 +36,23 @@ class MongoAPI(BaseAPI):
         self.auth_table = self.db.get_collection(self.config.auth_table)
         self.group_table = self.db.get_collection(self.config.group_table)
         self.audit_table = self.db.get_collection(self.config.audit_table)
+
+    #     # Configure indices
+    #     self.setup_indices()
+    #
+    # def setup_indices(self):
+    #     found = False
+    #     for key, value in self.data_table.index_information().items():
+    #         # Look for the primary key
+    #         if value.get('key') == [(self.config.primary_key, 1)]:
+    #             if value.get('unique', False) is True:
+    #                 found = True
+    #                 break
+    #
+    #     if not found:
+    #         # Create index
+    #         print(f'Creating unique index for {self.config.primary_key} on collection {self.config.data_table}')
+    #         self.data_table.create_index(self.config.primary_key, unique=True)
 
     def get_auth(self, user_id: str) -> Optional[User]:
         # Try to find user in the auth table
@@ -119,11 +136,21 @@ class MongoAPI(BaseAPI):
 
         # Save the item
         try:
-            self.data_table.insert_one(data)
+            # Set the document id
+            data['_id'] = document_id
+
+            # Insert the record
+            result = self.data_table.insert_one(data)
+            if not result.acknowledged:
+                raise Exception('Failed to save item')
+
             logger.info('[%(user)s] Successfully created item:\n%(item)s' % {
                 'user': self.user_identifier(user),
                 'item': data
             })
+        except DuplicateKeyError as e:
+            raise BadRequestException(f"An item with id '{document_id}' already exists")
+
         except Exception as e:
             logger.error(
                 '[%(user)s] Encountered error while attempting to create record %(error)s. Item:\n%(item)s' % {
@@ -260,15 +287,28 @@ class MongoAPI(BaseAPI):
         # Filter the data according to the user's permissions
         conditions = self.filtering.filter(user)
 
+        # Apply the search criteria for the requested item
+        conditions = self.filtering.And(
+            conditions,
+            self.filtering.equals(key, value)
+        )
+
         # Search for the item
         data = self.data_table.find_one(conditions)
+        if not data:
+            raise NotFoundException('Item not found')
+
+        # Convert ObjectId to string if necessary
+        if isinstance(data['_id'], ObjectId):
+            data['_id'] = str(data['_id'])
+
         if has_sentry:
             sentry_sdk.add_breadcrumb(
                 category='query', message='%s = %s' % (key, value), level='info', table=self.config.data_table
             )
 
         # Filter the response
-        output = self.post_process(data, user)
+        output = self.post_process([data], user)
 
         # There should only be a single item returned
         if len(output) == 0:
@@ -289,8 +329,10 @@ class MongoAPI(BaseAPI):
         :return: Data from the table
         :rtype: dict
         """
+        # Get user
         user = self.initialize_request(request)
 
+        # Build params
         params: Dict[str, str] = {}
         params.update(request.query_params)
         params.update(request.path_params)
@@ -312,17 +354,23 @@ class MongoAPI(BaseAPI):
         # Perform the query
         data = []
         for record in self.data_table.find(conditions):
-            # Exclude _id field
-            del record['_id']
+            # Convert ObjectId to string if necessary
+            if isinstance(record['_id'], ObjectId):
+                record['_id'] = str(record['_id'])
+
+            # Add the record
             data.append(record)
+
+        # Perform post processing
         data = self.post_process(data, user)
 
+        # Add audit log
         self.audit_log('LIST', request, user)
 
         return data
 
     def list_unique_values(self, request: Request, key: str,
-                           unique_func: Callable[[List[Dict], str], List[str]] = BaseAPI.unique_func) -> List[str]:
+                           unique_func: Callable[[List, str], List[str]] = lambda items, _: sorted(items)) -> List[str]:
         # Get the user
         user = self.initialize_request(request)
 
@@ -334,9 +382,26 @@ class MongoAPI(BaseAPI):
         # Build filters
         conditions = self.filtering.filter(user, params)
 
+        # Add field existence condition
+        conditions = self.filtering.And(
+            conditions,
+            self.filtering.exists(key, 'true')
+        )
+
+        # Build a projection expression to exclude fields based on user permissions
+        projection_expression = {}
+        for excluded_field in user.exclude_fields:
+            projection_expression[excluded_field] = False
+
+        # If any fields are being excluded, set the projection expression
+        args = {}
+        if projection_expression:
+            args['projection'] = projection_expression
+
         # Download the data
         try:
-            data = self.data_table.distinct(key, conditions)
+            raw_data = self.data_table.find(conditions, **args)
+            distinct_values = raw_data.distinct(key)
         except Exception as e:
             logger.error(
                 '[%(user)s] Encountered error while attempting to list records: %(error)s' % {
@@ -346,8 +411,15 @@ class MongoAPI(BaseAPI):
             )
             raise
 
-        # Post process the data
-        data = self.post_process(data, user)
+        # Make sure the requested key exists in the output - we only need to check the first record in the cursor.
+        # It will be missing if user does not have permissions to view it
+        for item in raw_data:
+            if key not in item:
+                raise UnauthorizedException(f"Not authorized to view contents of field '{key}'")
+            break
+
+        # Use the distinct values that were already saved
+        data = distinct_values
 
         # Make sure a unique, sorted list is returned
         output = unique_func(data, key)
@@ -490,19 +562,25 @@ class MongoAPI(BaseAPI):
         user = self.initialize_request(request)
 
         # Build multi-value filter expressions
-        filtering = GCPFiltering(self.data_table)
-        filters = filtering.multi_filter(user, key, values)
+        multi_filters = self.filtering.multi_filter(user, key, values)
         if has_sentry:
             sentry_sdk.add_breadcrumb(category='data', message='Built multi-value filter', level='info')
 
-        # Perform each generated filter expression and then combine the results together
+        # Perform each generated filter and then combine the results together
         output = []
-        for f in filters:
-            for record in f.stream():
-                # Add to output
-                record_dict = record
-                record_dict[self.config.primary_key] = record.id
-                output.append(record_dict)
+        for filters in multi_filters:
+            results = self.data_table.find(filters)
+            if not results:
+                continue
+
+            if isinstance(results, dict):
+                results = [results]
+
+            for record in results:
+                # Convert ObjectId to string if necessary
+                if isinstance(record['_id'], ObjectId):
+                    record['_id'] = str(record['_id'])
+                output.append(record)
 
         # Create audit log
         self.audit_log(action='SEARCH', request=request, user=user)

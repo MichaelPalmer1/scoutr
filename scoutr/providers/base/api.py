@@ -373,7 +373,7 @@ class BaseAPI:
 
     @abstractmethod
     def list_unique_values(self, request: Request, key: str,
-                           unique_func: Callable[[List[Dict], str], List[str]]) -> List[str]:
+                           unique_func: Callable[[List, str], List[str]]) -> List[str]:
         raise NotImplementedError
 
     @abstractmethod

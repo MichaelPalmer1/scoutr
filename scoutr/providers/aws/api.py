@@ -412,7 +412,7 @@ class DynamoAPI(BaseAPI):
         return data
 
     def list_unique_values(self, request: Request, key: str,
-                           unique_func: Callable[[List[Dict], str], List[str]] = BaseAPI.unique_func) -> List[str]:
+                           unique_func: Callable[[List, str], List[str]] = BaseAPI.unique_func) -> List[str]:
         # Get the user
         user = self.initialize_request(request)
 
