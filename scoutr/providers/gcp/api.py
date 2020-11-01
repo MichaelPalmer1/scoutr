@@ -1,12 +1,10 @@
-import json
 import logging
-from copy import deepcopy
 from typing import List, Dict, Optional, Any, Callable, Union, Tuple
 
 from firebase_admin import firestore
-from google.cloud.firestore_v1 import Client, DocumentSnapshot, CollectionReference, Query
+from google.cloud.firestore_v1 import Client, DocumentSnapshot, CollectionReference
 
-from scoutr.exceptions import NotFoundException, BadRequestException, UnauthorizedException
+from scoutr.exceptions import NotFoundException, BadRequestException
 from scoutr.models.config import Config
 from scoutr.models.request import Request
 from scoutr.models.user import User, Group
@@ -74,33 +72,7 @@ class FirestoreAPI(BaseAPI):
         :return: Created item
         :rtype: dict
         """
-        # Get user
-        user = self.initialize_request(request)
-
-        # Make sure the user has permission to update all of the fields specified
-        for key in data.keys():
-            if key in user.exclude_fields:
-                raise UnauthorizedException(f'Not authorized to create item with field {key}')
-
-        # Check that required fields have values
-        if validation:
-            self.validate_fields(validation, required_fields, data)
-            if has_sentry:
-                sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
-
-        # Build creation filters
-        for filter_field in user.filter_fields:
-            for sub_item in filter_field:
-                key = sub_item.field
-                filter_value = sub_item.value
-                if key not in data:
-                    raise BadRequestException(f'Missing required field {key}')
-
-                # Perform the filter
-                value = data[key]
-                if isinstance(filter_value, list) and value not in filter_value or \
-                        isinstance(filter_value, str) and value != filter_value:
-                    raise BadRequestException(f'Unauthorized value for field {key}')
+        user = self._prepare_create(request, data, validation, required_fields)
 
         # Make sure primary key is included
         document_id = data.get(self.config.primary_key)
@@ -386,65 +358,6 @@ class FirestoreAPI(BaseAPI):
         data = sorted(data, key=lambda item: item['time'], reverse=True)
 
         return data
-
-    def history(self, request: Request, key: str, value: str, actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
-        """
-        Given a resource key and value, build the history of the item over time.
-
-        :param Request request: Request object
-        :param str key: Resource key
-        :param str value: Resource value
-        :param tuple of str actions: List of actions to filter on
-        :return: List of the record's history
-        :rtype: list of dict
-        """
-        if not self.config.audit_table:
-            raise NotFoundException('Audit logs are not enabled')
-
-        param_overrides = {
-            f'resource.{key}': value,
-            'action__in': json.dumps(actions)
-        }
-
-        # Get user
-        user = self.initialize_request(request)
-
-        # Get the audit logs (reverse results so oldest item is first)
-        logs = self.list_audit_logs(request, param_overrides)[::-1]
-
-        # Check for no results
-        if len(logs) == 0:
-            return []
-
-        # Get the original record
-        current_item: dict = {'data': {}, 'time': None}
-        for item in logs:
-            if item['action'] == 'CREATE':
-                current_item['time'] = item['time']
-                current_item['data'] = item['body']
-                break
-
-        # Build the record history
-        history = [current_item]
-        for item in logs:
-            # Skip creation calls
-            if item['action'] == 'CREATE':
-                continue
-            elif item['action'] == 'DELETE':
-                history.insert(0, {'time': item['time'], 'data': {}})
-                continue
-
-            # Make a full copy of the current item
-            current_item = deepcopy(current_item)
-
-            # Update the current item with the changes
-            current_item['time'] = item['time']
-            current_item['data'].update(item.get('body', {}))
-
-            # Insert at the top of the history (i.e. most recent first)
-            history.insert(0, current_item)
-
-        return history
 
     def search(self, request: Request, key: str, values: List[str]) -> List[dict]:
         """

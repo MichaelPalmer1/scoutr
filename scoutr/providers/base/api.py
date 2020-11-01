@@ -1,15 +1,23 @@
+import json
 import re
 from abc import abstractmethod
+from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any, Callable, Union, Tuple
 
-from scoutr.exceptions import UnauthorizedException, BadRequestException, ForbiddenException
+from scoutr.exceptions import UnauthorizedException, BadRequestException, ForbiddenException, NotFoundException
 from scoutr.models.audit import AuditLog, AuditUser
 from scoutr.models.config import Config
 from scoutr.models.request import Request, UserData
 from scoutr.models.user import User, Group, Permissions
 from scoutr.providers.base.filtering import Filtering
 from scoutr.utils.utils import merge_lists
+
+try:
+    import sentry_sdk
+except ImportError:
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
 
 
 class BaseAPI:
@@ -188,7 +196,7 @@ class BaseAPI:
         raise ForbiddenException(f'Not authorized to perform {req.method} on endpoint {req.path}')
 
     @staticmethod
-    def validate_fields(validation: dict, required_fields: Union[List, Tuple], item: dict,
+    def validate_fields(validation: Optional[dict], required_fields: Union[List, Tuple], item: dict,
                         existing_item: Optional[dict] = None):
         """
         Perform field validation before creating/updating items into Dynamo
@@ -245,9 +253,38 @@ class BaseAPI:
                 elif not response:
                     raise BadRequestException("Invalid value for key '%s'" % key)
 
-    def _prepare_list(self, request: Request, process_search_keys: bool = True) -> (User, Dict[str, str]):
+    def _prepare_create(self, request: Request, data: dict, validation: dict = None,
+                        required_fields: Union[List, Tuple] = ()) -> User:
+        # Get user
         user = self.initialize_request(request)
 
+        # Make sure the user has permission to update all of the fields specified
+        unauthorized_fields = set(data.keys()).intersection(set(user.exclude_fields))
+        if unauthorized_fields:
+            raise UnauthorizedException(f'Not authorized to create item with fields {unauthorized_fields}')
+
+        # Run validation
+        self.validate_fields(validation, required_fields, data)
+        sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
+
+        # FIXME: Creation filters
+        # for filter_field in user.filter_fields:
+        #     key = filter_field.field
+        #     filter_value = filter_field.value
+        #
+        #     # Perform the filter
+        #     value = data[key]
+        #     if isinstance(filter_value, list) and value not in filter_value or \
+        #             isinstance(filter_value, str) and value != filter_value:
+        #         raise BadRequestException(f'Unauthorized value for field {key}')
+
+        return user
+
+    def _prepare_list(self, request: Request, process_search_keys: bool = True) -> (User, Dict[str, str]):
+        # Get user
+        user = self.initialize_request(request)
+
+        # Build params
         params: Dict[str, str] = {}
         params.update(request.query_params)
         params.update(request.path_params)
@@ -421,10 +458,65 @@ class BaseAPI:
     def list_audit_logs(self, request: Request, param_overrides: dict) -> List[dict]:
         raise NotImplementedError
 
-    @abstractmethod
     def history(self, request: Request, key: str, value: str,
                 actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
-        raise NotImplementedError
+        """
+        Given a resource key and value, build the history of the item over time.
+
+        :param Request request: Request object
+        :param str key: Resource key
+        :param str value: Resource value
+        :param tuple of str actions: List of actions to filter on
+        :return: List of the record's history
+        :rtype: list of dict
+        """
+        if not self.config.audit_table:
+            raise NotFoundException('Audit logs are not enabled')
+
+        param_overrides = {
+            f'resource.{key}': value,
+            'action__in': json.dumps(actions)
+        }
+
+        # Get user
+        self.initialize_request(request)
+
+        # Get the audit logs (reverse results so oldest item is first)
+        logs = self.list_audit_logs(request, param_overrides)[::-1]
+
+        # Check for no results
+        if len(logs) == 0:
+            return []
+
+        # Get the original record
+        current_item: dict = {'data': {}, 'time': None}
+        for item in logs:
+            if item['action'] == 'CREATE':
+                current_item['time'] = item['time']
+                current_item['data'] = item['body']
+                break
+
+        # Build the record history
+        history = [current_item]
+        for item in logs:
+            # Skip creation calls
+            if item['action'] == 'CREATE':
+                continue
+            elif item['action'] == 'DELETE':
+                history.insert(0, {'time': item['time'], 'data': {}})
+                continue
+
+            # Make a full copy of the current item
+            current_item = deepcopy(current_item)
+
+            # Update the current item with the changes
+            current_item['time'] = item['time']
+            current_item['data'].update(item.get('body', {}))
+
+            # Insert at the top of the history (i.e. most recent first)
+            history.insert(0, current_item)
+
+        return history
 
     @abstractmethod
     def search(self, request: Request, key: str, values: List[str]) -> List[dict]:

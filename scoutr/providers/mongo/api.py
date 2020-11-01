@@ -1,6 +1,4 @@
-import json
 import logging
-from copy import deepcopy
 from typing import List, Optional, Any, Callable, Union, Tuple
 
 from bson import ObjectId
@@ -83,6 +81,20 @@ class MongoAPI(BaseAPI):
 
         return True
 
+    @staticmethod
+    def get_projection_expression(user: User) -> dict:
+        # Build a projection expression to exclude fields based on user permissions
+        projection_expression = {}
+        for excluded_field in user.exclude_fields:
+            projection_expression[excluded_field] = False
+
+        # If any fields are being excluded, set the projection expression
+        args = {}
+        if projection_expression:
+            args['projection'] = projection_expression
+
+        return args
+
     def create(self, request: Request, data: dict, validation: dict = None,
                required_fields: Union[List, Tuple] = ()) -> dict:
         """
@@ -96,32 +108,7 @@ class MongoAPI(BaseAPI):
         :return: Created item
         :rtype: dict
         """
-        # Get user
-        user = self.initialize_request(request)
-
-        # Make sure the user has permission to update all of the fields specified
-        for key in data.keys():
-            if key in user.exclude_fields:
-                raise UnauthorizedException(f'Not authorized to create item with field {key}')
-
-        # Check that required fields have values
-        if validation:
-            self.validate_fields(validation, required_fields, data)
-            sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
-
-        # FIXME: Build creation filters
-        # for filter_field in user.filter_fields:
-        #     for sub_item in filter_field:
-        #         key = sub_item.field
-        #         filter_value = sub_item.value
-        #         if key not in data:
-        #             raise BadRequestException(f'Missing required field {key}')
-        #
-        #         # Perform the filter
-        #         value = data[key]
-        #         if isinstance(filter_value, list) and value not in filter_value or \
-        #                 isinstance(filter_value, str) and value != filter_value:
-        #             raise BadRequestException(f'Unauthorized value for field {key}')
+        user = self._prepare_create(request, data, validation, required_fields)
 
         # Make sure primary key is included
         document_id = data.get(self.config.primary_key)
@@ -140,7 +127,7 @@ class MongoAPI(BaseAPI):
 
             # Insert the record
             result = self.data_table.insert_one(data)
-            if not result.acknowledged:
+            if not result.inserted_id:
                 raise Exception('Failed to save item')
 
             logger.info('[%(user)s] Successfully created item:\n%(item)s' % {
@@ -169,7 +156,7 @@ class MongoAPI(BaseAPI):
 
     def update(self, request: Request, primary_key: dict, data: dict, validation: dict, audit_action='UPDATE') -> dict:
         """
-        Update an item in Dynamo
+        Update an item
 
         :param Request request: Request object
         :param dict primary_key: Dictionary formatted as {"primary_key": "value_of_row_to_update"}
@@ -230,7 +217,12 @@ class MongoAPI(BaseAPI):
         try:
             document_id = primary_key[self.config.primary_key]
             self.data_table.update_one(conditions, {'$set': data})
-            response = self.data_table.find_one({primary_key: document_id})
+
+            # Build a projection expression to exclude fields based on user permissions
+            args = self.get_projection_expression(user)
+
+            # Pull the updated item from the DB
+            response = self.data_table.find_one(document_id, **args)
             logger.info('[%(user)s] Successfully updated record "%(primary_key)s" with values:\n%(item)s' % {
                 'user': self.user_identifier(user),
                 'primary_key': primary_key,
@@ -248,13 +240,13 @@ class MongoAPI(BaseAPI):
             )
             raise
 
-        sentry_sdk.add_breadcrumb(category='data', message='Updated item in Dynamo', level='info')
+        sentry_sdk.add_breadcrumb(category='data', message='Updated item', level='info')
 
         # Create audit log
         self.audit_log(action=audit_action, resource=primary_key, changes=data, request=request, user=user)
 
         # Return updated record
-        return self.post_process([response], user)[0]
+        return response
 
     def get(self, request: Request, key: Any, value: Any) -> dict:
         """
@@ -270,40 +262,37 @@ class MongoAPI(BaseAPI):
         user = self.initialize_request(request)
 
         # Filter the data according to the user's permissions
-        conditions = self.filtering.filter(user)
-
-        # Apply the search criteria for the requested item
         conditions = self.filtering.And(
-            conditions,
+            self.filtering.filter(user),
             self.filtering.equals(key, value)
         )
 
         # Search for the item
-        data = self.data_table.find_one(conditions)
-        if not data:
+        doc_count = self.data_table.count_documents(conditions)
+
+        # Check results
+        if doc_count == 0:
             raise NotFoundException('Item not found')
+        elif doc_count > 1:
+            # This should only be returning a single item
+            raise BadRequestException('Multiple items returned')
+
+        # Build a projection expression to exclude fields based on user permissions
+        args = self.get_projection_expression(user)
+
+        # Run the query
+        data = self.data_table.find_one(conditions, **args)
+        sentry_sdk.add_breadcrumb(
+            category='query', message='%s = %s' % (key, value), level='info', table=self.config.data_table
+        )
 
         # Convert ObjectId to string if necessary
         if isinstance(data['_id'], ObjectId):
             data['_id'] = str(data['_id'])
 
-        sentry_sdk.add_breadcrumb(
-            category='query', message='%s = %s' % (key, value), level='info', table=self.config.data_table
-        )
-
-        # Filter the response
-        output = self.post_process([data], user)
-
-        # There should only be a single item returned
-        if len(output) == 0:
-            raise NotFoundException('Item not found')
-        elif len(output) > 1:
-            # We should not be returning more than a single item
-            raise BadRequestException('Multiple items returned')
-        else:
-            # Item was found, return the single item
-            self.audit_log(action='GET', request=request, user=user, resource={key: value})
-            return output[0]
+        # Item was found, return the single item
+        self.audit_log(action='GET', request=request, user=user, resource={key: value})
+        return data
 
     def list(self, request: Request) -> List[dict]:
         """
@@ -320,18 +309,18 @@ class MongoAPI(BaseAPI):
         if conditions is None:
             conditions = {}
 
+        # Build a projection expression to exclude fields based on user permissions
+        args = self.get_projection_expression(user)
+
         # Perform the query
         data = []
-        for record in self.data_table.find(conditions):
+        for record in self.data_table.find(conditions, **args):
             # Convert ObjectId to string if necessary
             if isinstance(record['_id'], ObjectId):
                 record['_id'] = str(record['_id'])
 
             # Add the record
             data.append(record)
-
-        # Perform post processing
-        data = self.post_process(data, user)
 
         # Add audit log
         self.audit_log('LIST', request, user)
@@ -349,14 +338,7 @@ class MongoAPI(BaseAPI):
         )
 
         # Build a projection expression to exclude fields based on user permissions
-        projection_expression = {}
-        for excluded_field in user.exclude_fields:
-            projection_expression[excluded_field] = False
-
-        # If any fields are being excluded, set the projection expression
-        args = {}
-        if projection_expression:
-            args['projection'] = projection_expression
+        args = self.get_projection_expression(user)
 
         # Download the data
         try:
@@ -443,66 +425,6 @@ class MongoAPI(BaseAPI):
 
         return data
 
-    def history(self, request: Request, key: str, value: str,
-                actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
-        """
-        Given a resource key and value, build the history of the item over time.
-
-        :param Request request: Request object
-        :param str key: Resource key
-        :param str value: Resource value
-        :param tuple of str actions: List of actions to filter on
-        :return: List of the record's history
-        :rtype: list of dict
-        """
-        if not self.config.audit_table:
-            raise NotFoundException('Audit logs are not enabled')
-
-        param_overrides = {
-            f'resource.{key}': value,
-            'action__in': json.dumps(actions)
-        }
-
-        # Get user
-        self.initialize_request(request)
-
-        # Get the audit logs (reverse results so oldest item is first)
-        logs = self.list_audit_logs(request, param_overrides)[::-1]
-
-        # Check for no results
-        if len(logs) == 0:
-            return []
-
-        # Get the original record
-        current_item: dict = {'data': {}, 'time': None}
-        for item in logs:
-            if item['action'] == 'CREATE':
-                current_item['time'] = item['time']
-                current_item['data'] = item['body']
-                break
-
-        # Build the record history
-        history = [current_item]
-        for item in logs:
-            # Skip creation calls
-            if item['action'] == 'CREATE':
-                continue
-            elif item['action'] == 'DELETE':
-                history.insert(0, {'time': item['time'], 'data': {}})
-                continue
-
-            # Make a full copy of the current item
-            current_item = deepcopy(current_item)
-
-            # Update the current item with the changes
-            current_item['time'] = item['time']
-            current_item['data'].update(item.get('body', {}))
-
-            # Insert at the top of the history (i.e. most recent first)
-            history.insert(0, current_item)
-
-        return history
-
     def search(self, request: Request, key: str, values: List[str]) -> List[dict]:
         """
         Perform a multi-value search of a field in the table. The search endpoint should be configured in API Gateway:
@@ -525,10 +447,13 @@ class MongoAPI(BaseAPI):
         multi_filters = self.filtering.multi_filter(user, key, values)
         sentry_sdk.add_breadcrumb(category='data', message='Built multi-value filter', level='info')
 
+        # Build a projection expression to exclude fields based on user permissions
+        args = self.get_projection_expression(user)
+
         # Perform each generated filter and then combine the results together
         output = []
         for filters in multi_filters:
-            results = self.data_table.find(filters)
+            results = self.data_table.find(filters, **args)
             if not results:
                 continue
 
@@ -544,8 +469,8 @@ class MongoAPI(BaseAPI):
         # Create audit log
         self.audit_log(action='SEARCH', request=request, user=user)
 
-        # Return the filtered response
-        return self.post_process(output, user)
+        # Return the results
+        return output
 
     def delete(self, request: Request, primary_key: dict) -> dict:
         """
@@ -559,18 +484,18 @@ class MongoAPI(BaseAPI):
         # Get user
         user = self.initialize_request(request)
 
-        # TODO: Default conditional expression to make sure the item actually exists
-
         # Add in the user's permissions
-        conditions = self.filtering.filter(user)
         conditions = self.filtering.And(
-            conditions,
+            self.filtering.filter(user),
             self.filtering.equals(self.config.primary_key, primary_key[self.config.primary_key])
         )
 
         # Perform the deletion
         try:
-            self.data_table.delete_one(conditions)
+            result = self.data_table.delete_one(conditions)
+            if result.deleted_count == 0:
+                raise NotFoundException('Failed to delete item')
+
             logger.info('[%(user)s] Successfully deleted record "%(primary_key)s"' % {
                 'user': self.user_identifier(user),
                 'primary_key': primary_key,
