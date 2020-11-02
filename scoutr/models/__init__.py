@@ -5,6 +5,9 @@ class Model:
     def __init__(self, **kwargs):
         for attr, cls in get_type_hints(self).items():
             if attr not in kwargs:
+                if getattr(self, attr, None) is not None:
+                    continue
+
                 try:
                     value = cls()
                 except TypeError:
