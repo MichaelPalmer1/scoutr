@@ -1,11 +1,13 @@
 from typing import List, Dict, Union, Any
 
 from scoutr.exceptions import InvalidUserException
+from scoutr.providers.base.filtering import Filtering
 from scoutr.models import Model
 
 
 class FilterField(Model):
     field: str
+    operator: str = Filtering.OPERATION_EQUAL
     value: Union[List, str]
 
     @classmethod

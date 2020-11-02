@@ -1,4 +1,5 @@
 import json
+from typing import Dict, Callable, Any
 
 from scoutr.providers.base.filtering import Filtering
 
@@ -8,8 +9,9 @@ class MongoFiltering(Filtering):
     OPERATION_TYPE = 'type'
     OPERATION_HAS_ELEMENTS = 'haselements'
 
-    def operations(self) -> dict:
-        ops = super(MongoFiltering, self).operations()
+    @property
+    def operations(self) -> Dict[str, Callable[[str, Any], Any]]:
+        ops = super(MongoFiltering, self).operations
         ops.update({
             self.OPERATION_REGEX: self.regex,
             self.OPERATION_TYPE: self.is_type,
