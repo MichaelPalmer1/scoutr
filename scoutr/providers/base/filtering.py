@@ -121,16 +121,17 @@ class Filtering:
 
         # Merge all possible values for this filter key together
         filters: Dict[str, List[FilterField]] = {}
-        for item in user.filter_fields:
-            filters.setdefault(item.field, list())
-            filters[item.field].append(item)
+        for filter_field in user.filter_fields:
+            filters.setdefault(filter_field.field, list())
+            filters[filter_field.field].append(filter_field)
 
         # Perform the filter
         conditions = None
         for key, filter_items in filters.items():
             if len(filter_items) == 1:
                 # Perform a single query
-                conditions = self.perform_filter(conditions, f'{key}__{item.operator}', filter_items[0].value)
+                item = filter_items[0]
+                conditions = self.perform_filter(conditions, f'{key}__{item.operator}', item.value)
             elif len(filter_items) > 1:
                 # Perform an OR query against all possible values for this key
                 filter_conds = None
