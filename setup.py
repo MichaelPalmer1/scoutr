@@ -5,10 +5,10 @@ with open('README.md', 'r') as f:
 
 setup(
     name='scoutr',
-    description='Generic full access control API for talking to Dynamo via API Gateway',
+    description='Generic full access control API for talking to a NoSQL database',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    keywords='dynamo nosql api rbac',
+    keywords='dynamo firestore mongo nosql api rbac',
     url='https://github.com/GESkunkworks/scoutr',
     use_scm_version=True,
     author='Michael Palmer',
@@ -46,6 +46,7 @@ setup(
     classifiers=[
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Development Status :: 5 - Production/Stable'
     ]
 )
