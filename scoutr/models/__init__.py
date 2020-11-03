@@ -5,6 +5,7 @@ class Model:
     def __init__(self, **kwargs):
         for attr, cls in get_type_hints(self).items():
             if attr not in kwargs:
+                # If a default value is set, use that
                 if getattr(self, attr, None) is not None:
                     continue
 
