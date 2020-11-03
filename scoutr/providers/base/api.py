@@ -283,14 +283,16 @@ class BaseAPI:
 
         return user
 
-    def _prepare_list(self, request: Request, process_search_keys: bool = True) -> (User, Dict[str, str]):
+    def _prepare_list(self, request: Request, process_path_params: bool = True,
+                      process_search_keys: bool = True) -> (User, Dict[str, str]):
         # Get user
         user = self.initialize_request(request)
 
         # Build params
         params: Dict[str, str] = {}
         params.update(request.query_params)
-        params.update(request.path_params)
+        if process_path_params:
+            params.update(request.path_params)
 
         # Generate dynamo search
         if process_search_keys:

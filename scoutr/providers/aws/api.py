@@ -354,7 +354,7 @@ class DynamoAPI(BaseAPI):
 
     def list_unique_values(self, request: Request, key: str,
                            unique_func: Callable[[List, str], List[str]] = BaseAPI.unique_func) -> List[str]:
-        user, params = self._prepare_list(request, False)
+        user, params = self._prepare_list(request, False, False)
 
         # Build filters
         conditions = self.filtering.And(
