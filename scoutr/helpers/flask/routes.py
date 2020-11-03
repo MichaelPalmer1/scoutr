@@ -7,7 +7,7 @@ from flask_api.exceptions import ParseError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from scoutr.helpers.flask.oidc import get_user_from_oidc, build_oidc_request
-from scoutr.helpers.flask.utils import init_flask_user, flaskapi_exception_wrapper, parse_query_params
+from scoutr.helpers.flask.utils import init_flask_user, flaskapi_exception_wrapper
 from scoutr.providers.base.api import BaseAPI
 
 
