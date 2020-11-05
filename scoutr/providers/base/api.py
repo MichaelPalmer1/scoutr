@@ -192,6 +192,10 @@ class BaseAPI:
 
             # User is authorized to access this endpoint
             return
+        
+        # Make sure query params have keys and values
+        if set(req.query_params.keys()).intersection(['']) or set(req.query_params.values()).intersection(['']):
+            raise BadRequestException('Query strings must have keys and values')
 
         raise ForbiddenException(f'Not authorized to perform {req.method} on endpoint {req.path}')
 
