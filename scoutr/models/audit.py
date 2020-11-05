@@ -1,6 +1,7 @@
-from typing import Dict, Union
+from typing import Dict, Union, List
 
 from scoutr.models import Model
+from scoutr.models.user import FilterField
 
 
 class AuditUser(Model):
@@ -10,6 +11,7 @@ class AuditUser(Model):
     email: str
     source_ip: str
     user_agent: str
+    filter_fields: List[FilterField]
 
 
 class AuditLog(Model):

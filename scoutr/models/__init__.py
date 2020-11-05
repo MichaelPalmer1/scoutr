@@ -37,9 +37,15 @@ class Model:
         output = {}
         for attribute in self.attributes():
             value = getattr(self, attribute)
-            if isinstance(value, Model):
+            if isinstance(value, list):
+                for i, item in enumerate(value):
+                    if isinstance(item, Model):
+                        value[i] = item.dict()
+            elif isinstance(value, Model):
                 value = value.dict()
-            output[attribute] = value
+
+            if value is not None:
+                output[attribute] = value
 
         return output
 
