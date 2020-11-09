@@ -1,5 +1,6 @@
 import json
 
+from scoutr.exceptions import HttpException
 from scoutr.models.request import Request, RequestUser
 
 
@@ -34,3 +35,16 @@ def build_api_gateway_request(event: dict) -> Request:
 
 def get_api_gateway_user(event: dict) -> RequestUser:
     return RequestUser(id=event['requestContext']['identity']['apiKeyId'], data=None)
+
+
+def handle_http_exception(e: HttpException):
+    if len(e.args) == 1 and isinstance(e.args[0], (list, dict)):
+        return {
+            'statusCode': e.status,
+            'body': json.dumps({'errors': e.args[0]})
+        }
+
+    return {
+        'statusCode': e.status,
+        'body': json.dumps({'error': str(e)})
+    }

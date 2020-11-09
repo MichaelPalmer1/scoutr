@@ -76,7 +76,7 @@ class BaseAPI:
             value = merge_lists(getattr(user, attribute), getattr(group, attribute))
             setattr(user, attribute, value)
 
-    def get_user(self, user_id: str, user_data: Optional[UserData]) -> User:
+    def get_user(self, user_id: str, user_data: Optional[UserData] = None) -> User:
         is_user = True
         user = User(id=user_id)
 
@@ -248,6 +248,7 @@ class BaseAPI:
         sentry_sdk.add_breadcrumb(category='validate', message='Validated required fields were included', level='info')
 
         # Perform field validation
+        errors: Dict[str, str] = {}
         with ThreadPoolExecutor() as executor:
             threads = {}
             for key, func in validation.items():
@@ -257,16 +258,25 @@ class BaseAPI:
 
             for future in futures.as_completed(threads):
                 key = threads[future]
-                result = future.result()
+                try:
+                    result = future.result()
+                except Exception as e:
+                    errors[key] = str(e)
+                    continue
+
                 if isinstance(result, dict):
                     if 'result' not in result:
-                        raise BadRequestException('Validator for %s is not properly configured' % key)
+                        errors[key] = 'Validator is not properly configured'
                     elif not result['result']:
                         if not isinstance(result.get('message'), str):
-                            raise BadRequestException('Validator for %s is not properly configured' % key)
-                        raise BadRequestException(result['message'])
+                            errors[key] = 'Validator is not properly configured'
+                            continue
+                        errors[key] = result['message']
                 elif not result:
-                    raise BadRequestException("Invalid value for key '%s'" % key)
+                    errors[key] = 'Invalid value'
+
+        if errors:
+            raise BadRequestException(errors)
 
         sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
 
