@@ -1,6 +1,8 @@
 import json
 import re
 from abc import abstractmethod
+from concurrent import futures
+from concurrent.futures.thread import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any, Callable, Union, Tuple
@@ -246,17 +248,24 @@ class BaseAPI:
         sentry_sdk.add_breadcrumb(category='validate', message='Validated required fields were included', level='info')
 
         # Perform field validation
-        for key, func in validation.items():
-            if key in item:
-                response = func(item[key], item, existing_item)
-                if isinstance(response, dict):
-                    if 'result' not in response:
+        with ThreadPoolExecutor() as executor:
+            threads = {}
+            for key, func in validation.items():
+                if key in item:
+                    future = executor.submit(func, item[key], item, existing_item)
+                    threads.update({future: key})
+
+            for future in futures.as_completed(threads):
+                key = threads[future]
+                result = future.result()
+                if isinstance(result, dict):
+                    if 'result' not in result:
                         raise BadRequestException('Validator for %s is not properly configured' % key)
-                    elif not response['result']:
-                        if not isinstance(response.get('message'), str):
+                    elif not result['result']:
+                        if not isinstance(result.get('message'), str):
                             raise BadRequestException('Validator for %s is not properly configured' % key)
-                        raise BadRequestException(response['message'])
-                elif not response:
+                        raise BadRequestException(result['message'])
+                elif not result:
                     raise BadRequestException("Invalid value for key '%s'" % key)
 
         sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
