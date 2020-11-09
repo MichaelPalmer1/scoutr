@@ -568,17 +568,18 @@ class DynamoAPI:
                 sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
 
         # Build creation filters
-        for filter_field in user['filter_fields']:
-            key = filter_field['field']
-            filter_value = filter_field['value']
-            if key not in item:
-                raise BadRequestException(f'Missing required field {key}')
+        for sub_list in user['filter_fields']:
+            for filter_field in sub_list:
+                key = filter_field['field']
+                filter_value = filter_field['value']
+                if key not in item:
+                    raise BadRequestException(f'Missing required field {key}')
 
-            # Perform the filter
-            value = item[key]
-            if isinstance(filter_value, list) and value not in filter_value or \
-                isinstance(filter_value, str) and value != filter_value:
-                raise BadRequestException(f'Unauthorized value for field {key}')
+                # Perform the filter
+                value = item[key]
+                if isinstance(filter_value, list) and value not in filter_value or \
+                    isinstance(filter_value, str) and value != filter_value:
+                    raise BadRequestException(f'Unauthorized value for field {key}')
 
         # Build condition to ensure the unique key does not exist
         resource = {}
