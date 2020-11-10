@@ -24,6 +24,11 @@ class Filtering:
     OPERATION_IN = 'in'
     OPERATION_NOT_IN = 'notin'
 
+    FILTER_ACTION_READ = 'READ'
+    FILTER_ACTION_CREATE = 'CREATE'
+    FILTER_ACTION_UPDATE = 'UPDATE'
+    FILTER_ACTION_DELETE = 'DELETE'
+
     NUMERIC_OPERATIONS = (
         OPERATION_GREATER_THAN,
         OPERATION_LESS_THAN,
@@ -115,7 +120,7 @@ class Filtering:
     def not_in(self, attr: str, value):
         raise NotImplementedError
 
-    def user_filters(self, user: Optional[User]) -> Any:
+    def user_filters(self, user: Optional[User], filter_action: str = 'READ') -> Any:
         if not user:
             return
 
@@ -144,11 +149,11 @@ class Filtering:
 
         return conditions
 
-    def filter(self, user: Optional[User], filters: dict = None):
+    def filter(self, user: Optional[User], filters: dict = None, filter_action: str = 'READ'):
         if filters is None:
             filters = {}
 
-        conditions = self.user_filters(user)
+        conditions = self.user_filters(user, filter_action)
 
         # Build filters that were passed in
         for key, value in filters.items():

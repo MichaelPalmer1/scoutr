@@ -117,7 +117,10 @@ class BaseAPI:
                     user.update_fields_permitted,
                     entitlement.update_fields_permitted
                 )
-                user.filter_fields = merge_lists(user.filter_fields, entitlement.filter_fields)
+                user.read_filters = merge_lists(user.read_filters, entitlement.read_filters)
+                user.create_filters = merge_lists(user.create_filters, entitlement.create_filters)
+                user.update_filters = merge_lists(user.update_filters, entitlement.update_filters)
+                user.delete_filters = merge_lists(user.delete_filters, entitlement.delete_filters)
 
         # Check that a user was found
         if not is_user and not entitlement_ids:
@@ -167,11 +170,35 @@ class BaseAPI:
             if not isinstance(item, str):
                 raise UnauthorizedException(f"User '{user.id}' field 'exclude_fields' must be a list of strings")
 
-        # Validate filter fields
-        for filter_field in user.filter_fields:
-            if not filter_field.field or not filter_field.value:
+        # Validate read filters
+        for read_filter in user.read_filters:
+            if not read_filter.field or not read_filter.value:
                 raise UnauthorizedException(
-                    f"User '{user.id}' field 'filter_fields' must be a list of dictionaries with each "
+                    f"User '{user.id}' field 'read_filters' must be a list of dictionaries with each "
+                    "item formatted as {'field': 'field_name', 'operation': 'eq', 'value': 'value'}"
+                )
+
+        # Validate create filters
+        for create_filters in user.create_filters:
+            if not create_filters.field or not create_filters.value:
+                raise UnauthorizedException(
+                    f"User '{user.id}' field 'create_filters' must be a list of dictionaries with each "
+                    "item formatted as {'field': 'field_name', 'operation': 'eq', 'value': 'value'}"
+                )
+
+        # Validate update filters
+        for update_filters in user.update_filters:
+            if not update_filters.field or not update_filters.value:
+                raise UnauthorizedException(
+                    f"User '{user.id}' field 'update_filters' must be a list of dictionaries with each "
+                    "item formatted as {'field': 'field_name', 'operation': 'eq', 'value': 'value'}"
+                )
+
+        # Validate delete filters
+        for delete_filters in user.delete_filters:
+            if not delete_filters.field or not delete_filters.value:
+                raise UnauthorizedException(
+                    f"User '{user.id}' field 'delete_filters' must be a list of dictionaries with each "
                     "item formatted as {'field': 'field_name', 'operation': 'eq', 'value': 'value'}"
                 )
 
@@ -294,9 +321,9 @@ class BaseAPI:
         self.validate_fields(validation, required_fields, data)
 
         # FIXME: Creation filters
-        # for filter_field in user.filter_fields:
-        #     key = filter_field.field
-        #     filter_value = filter_field.value
+        # for create_filter in user.create_filters:
+        #     key = create_filter.field
+        #     filter_value = create_filter.value
         #
         #     # Perform the filter
         #     value = data[key]
@@ -386,7 +413,10 @@ class BaseAPI:
                 username=user.username,
                 source_ip=request.source_ip,
                 user_agent=request.user_agent,
-                filter_fields=user.filter_fields
+                read_filters=user.read_filters,
+                create_filters=user.create_filters,
+                update_filters=user.update_filters,
+                delete_filters=user.delete_filters
             ),
             action=action,
             method=request.method,

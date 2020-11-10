@@ -11,7 +11,10 @@ class AuditUser(Model):
     email: str
     source_ip: str
     user_agent: str
-    filter_fields: List[FilterField]
+    read_filters: List[FilterField]
+    create_filters: List[FilterField]
+    update_filters: List[FilterField]
+    delete_filters: List[FilterField]
 
 
 class AuditLog(Model):
