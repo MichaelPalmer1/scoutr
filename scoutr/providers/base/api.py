@@ -5,7 +5,7 @@ from concurrent import futures
 from concurrent.futures.thread import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Any, Callable, Union, Tuple
+from typing import List, Dict, Optional, Any, Callable, Union, Tuple, Set
 
 from scoutr.exceptions import UnauthorizedException, BadRequestException, ForbiddenException, NotFoundException
 from scoutr.models.audit import AuditLog, AuditUser
@@ -36,14 +36,14 @@ class BaseAPI:
             try:
                 user = self.get_user(request.user.id, request.user.data)
             except Exception as e:
-                print('Failed to fetch user: %s' % e)
+                print(f'Failed to fetch user: {e}')
                 return False
 
             # Validate the user
             try:
                 self.validate_user(user)
             except Exception as e:
-                print('Encountered error while validating user: %s' % e)
+                print(f'Encountered error while validating user: {e}')
                 return False
 
         # Verify user was provided/looked up
@@ -168,19 +168,19 @@ class BaseAPI:
                 raise UnauthorizedException(f"User '{user.id}' field 'exclude_fields' must be a list of strings")
 
         # Validate filter fields
-        # for item in user.filter_fields:
-        #     if not isinstance(item, FilterField) or 'field' not in item or 'value' not in item:
-        #         raise UnauthorizedException(
-        #             f"User '{user.id}' field 'filter_fields' must be a list of dictionaries with each "
-        #             "item formatted as {'field': 'field_name', 'value': 'value'}"
-        #         )
+        for filter_field in user.filter_fields:
+            if not filter_field.field or not filter_field.value:
+                raise UnauthorizedException(
+                    f"User '{user.id}' field 'filter_fields' must be a list of dictionaries with each "
+                    "item formatted as {'field': 'field_name', 'operation': 'eq', 'value': 'value'}"
+                )
 
         # Make sure all the endpoints are valid regex
         for permitted_endpoint in user.permitted_endpoints:
             try:
                 re.compile(permitted_endpoint.endpoint)
             except Exception as e:
-                raise BadRequestException('Failed to compile endpoint regex: %s' % e)
+                raise BadRequestException(f'Failed to compile endpoint regex: {e}')
 
     def validate_request(self, req: Request, user: User):
         # Make sure the user has permissions to access this endpoint
@@ -243,7 +243,7 @@ class BaseAPI:
         if required_fields:
             missing_keys = set(required_fields).difference(set(item.keys()))
             if missing_keys:
-                raise BadRequestException('Missing required fields %s' % missing_keys)
+                raise BadRequestException(f'Missing required fields {missing_keys}')
 
         sentry_sdk.add_breadcrumb(category='validate', message='Validated required fields were included', level='info')
 
@@ -362,10 +362,7 @@ class BaseAPI:
             for field in user.exclude_fields:
                 if field in item:
                     if field not in fields_logged:
-                        print('[%(user)s] Excluding field "%(field)s" from response' % {
-                            'user': self.user_identifier(user),
-                            'field': field
-                        })
+                        print(f'[{self.user_identifier(user)}] Excluding field "{field}" from response"')
                         fields_logged.add(field)
                     del item[field]
 
@@ -423,13 +420,14 @@ class BaseAPI:
             print('Failed audit log', item)
 
     @classmethod
-    def value_in_list(cls, value, valid_options, option_name='option', custom_error_message=None):
+    def value_in_set(cls, value: str, valid_options: Set[str], option_name: str = 'option',
+                     custom_error_message: str = ''):
         """
         Check if a value is contained in a list of valid options. This is supplied as a convenience function
         and is intended to be used with the input field validation on creates/updates.
 
         :param str value: Value to check
-        :param list of str valid_options: List of options that the value should be included in for this to be successful
+        :param set of str valid_options: List of options that the value should be included in for this to be successful
         :param str option_name: Optional descriptive name of the option that can be used to enrich an error message.
         :param str custom_error_message: Optional custom error message to return instead of the default one.
         :return: Dictionary that can be used with the field_validation
@@ -437,11 +435,7 @@ class BaseAPI:
         """
         return {
             'result': value in valid_options,
-            'message': custom_error_message or "%s is not a valid %s. Valid options: %s" % (
-                value,
-                option_name,
-                valid_options
-            )
+            'message': custom_error_message or f'{value} is not a valid {option_name}. Valid options: {valid_options}'
         }
 
     @staticmethod

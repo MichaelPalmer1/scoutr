@@ -11,9 +11,21 @@ class FilterField(Model):
 
     @classmethod
     def load(cls, data: Dict[str, Any]):
-        if 'field' not in data or 'value' not in data:
-            raise InvalidUserException('Invalid entry on user filter fields')
-        return cls(**data)
+        filter_field = super(FilterField, cls).load(data)
+
+        # Perform type check
+        if not isinstance(data.get('field', None), str):
+            raise InvalidUserException(f'Invalid type for field on user filter fields')
+        if not isinstance(data.get('value', None), (str, list)):
+            raise InvalidUserException(f'Invalid type for value on user filter fields')
+        if isinstance(data.get('value', None), list):
+            for item in data:
+                if not isinstance(item, str):
+                    raise InvalidUserException(f'User filter fields value must be a list of string values')
+        if not isinstance(data.get('operator', ''), str):
+            raise InvalidUserException(f'Invalid type for operator on user filter fields')
+
+        return filter_field
 
 
 class PermittedEndpoints(Model):
@@ -22,13 +34,15 @@ class PermittedEndpoints(Model):
 
     @classmethod
     def load(cls, data: Dict[str, str]):
-        if 'endpoint' not in data or 'method' not in data:
-            raise InvalidUserException('Invalid entry on user permitted endpoints')
+        permitted_endpoint = super(PermittedEndpoints, cls).load(data)
+
+        # Perform type check
         if not isinstance(data['endpoint'], str):
-            raise InvalidUserException('Invalid entry on user permitted endpoints')
+            raise InvalidUserException('Invalid type for endpoint on user permitted endpoints')
         if not isinstance(data['method'], str):
-            raise InvalidUserException('Invalid entry on user permitted endpoints')
-        return cls(**data)
+            raise InvalidUserException('Invalid type for method on user permitted endpoints')
+
+        return permitted_endpoint
 
 
 class Permissions(Model):

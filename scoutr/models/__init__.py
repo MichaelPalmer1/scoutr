@@ -51,4 +51,17 @@ class Model:
 
     @classmethod
     def load(cls, data: Dict[str, Any]):
+        valid_attributes = set(cls.attributes())
+
+        # Compile list of required fields (fields that default to None)
+        required_fields = set()
+        for attr in valid_attributes:
+            if getattr(cls, attr, None) is None:
+                required_fields.add(attr)
+
+        # Make sure required fields have values
+        missing_fields = required_fields - set(data)
+        if missing_fields:
+            raise Exception(f'Missing required fields on {cls.__name__}: {missing_fields}')
+
         return cls(**data)
