@@ -47,7 +47,7 @@ class DynamoAPI(BaseAPI):
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table
-        result = self.group_table.get_item(Key={'group_id': group_id})
+        result = self.group_table.get_item(Key={'id': group_id})
 
         if not result.get('Item'):
             return None
