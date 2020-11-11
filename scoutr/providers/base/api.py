@@ -12,7 +12,7 @@ from scoutr.models.audit import AuditLog, AuditUser
 from scoutr.models.config import Config
 from scoutr.models.request import Request, UserData
 from scoutr.models.user import User, Group, Permissions
-from scoutr.providers.base.filtering import Filtering
+from scoutr.providers.base.filtering import Filtering, LocalFiltering
 from scoutr.utils.utils import merge_lists
 
 try:
@@ -320,16 +320,10 @@ class BaseAPI:
         # Run validation
         self.validate_fields(validation, required_fields, data)
 
-        # FIXME: Creation filters
-        # for create_filter in user.create_filters:
-        #     key = create_filter.field
-        #     filter_value = create_filter.value
-        #
-        #     # Perform the filter
-        #     value = data[key]
-        #     if isinstance(filter_value, list) and value not in filter_value or \
-        #             isinstance(filter_value, str) and value != filter_value:
-        #         raise BadRequestException(f'Unauthorized value for field {key}')
+        # Creation filters
+        local_filter = LocalFiltering(data)
+        if local_filter.filter(user, action=local_filter.FILTER_ACTION_CREATE) is False:
+            raise BadRequestException(f'Unauthorized value(s) for field(s): {local_filter.failed_filters}')
 
         return user
 
