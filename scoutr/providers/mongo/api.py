@@ -168,7 +168,11 @@ class MongoAPI(BaseAPI):
         self.validate_update(user, data)
 
         # Add in the user's permissions
-        conditions = self.filtering.filter(user, {'_id': primary_key[self.config.primary_key]})
+        conditions = self.filtering.filter(
+            user,
+            {'_id': primary_key[self.config.primary_key]},
+            action=self.filtering.FILTER_ACTION_UPDATE
+        )
 
         # Get the existing item
         existing_item = self.data_table.find_one(conditions)
@@ -469,7 +473,7 @@ class MongoAPI(BaseAPI):
 
         # Add in the user's permissions
         conditions = self.filtering.And(
-            self.filtering.filter(user),
+            self.filtering.filter(user, action=self.filtering.FILTER_ACTION_DELETE),
             self.filtering.equals('_id', primary_key[self.config.primary_key])
         )
 

@@ -1,4 +1,4 @@
-import os
+# import os
 
 # import sentry_sdk
 import random
@@ -50,7 +50,7 @@ def wait_random_time(value, item, existing_item=None):
 
 
 @app.route("/item/", methods=['POST'])
-@flaskapi_exception_wrapper
+# @flaskapi_exception_wrapper
 def create_item():
     """Create an item"""
     return api.create(

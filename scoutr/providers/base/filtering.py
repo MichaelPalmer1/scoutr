@@ -120,13 +120,10 @@ class Filtering:
     def not_in(self, attr: str, value):
         raise NotImplementedError
 
-    def user_filters(self, user: Optional[User], filter_action: str = 'READ') -> Any:
-        if not user:
-            return
-
+    def _user_filters(self, filter_fields: List[FilterField]) -> Any:
         # Merge all possible values for this filter key together
         filters: Dict[str, List[FilterField]] = {}
-        for filter_field in user.filter_fields:
+        for filter_field in filter_fields:
             filters.setdefault(filter_field.field, list())
             filters[filter_field.field].append(filter_field)
 
@@ -149,12 +146,29 @@ class Filtering:
 
         return conditions
 
-    def filter(self, user: Optional[User], filters: dict = None, filter_action: str = 'READ'):
+    def filter(self, user: Optional[User], filters: Optional[dict] = None, action: str = FILTER_ACTION_READ) -> Any:
+        conditions = None
         if filters is None:
             filters = {}
 
-        conditions = self.user_filters(user, filter_action)
+        if user:
+            # Select filter type (defaults to read filters)
+            if action == self.FILTER_ACTION_CREATE:
+                filter_fields = user.create_filters
+            elif action == self.FILTER_ACTION_UPDATE:
+                filter_fields = user.update_filters
+            elif action == self.FILTER_ACTION_DELETE:
+                filter_fields = user.delete_filters
+            else:
+                filter_fields = user.read_filters
 
+            # Perform user filter
+            conditions = self._user_filters(filter_fields)
+
+        # Run filter operation
+        return self._filter(conditions, filters)
+
+    def _filter(self, conditions: Any, filters: dict) -> Any:
         # Build filters that were passed in
         for key, value in filters.items():
             if isinstance(value, list):
@@ -221,7 +235,7 @@ class Filtering:
             raise BadRequestException('No search values were provided')
 
         # Build pre-set filters
-        base_condition = self.user_filters(user)
+        base_condition = self.filter(user)
 
         # Build the multi-filters
         expressions = []

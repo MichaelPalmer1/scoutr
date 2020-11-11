@@ -2,30 +2,45 @@ from typing import get_type_hints, Dict, Any
 
 
 class Model:
-    def __init__(self, **kwargs):
-        for attr, cls in get_type_hints(self).items():
-            if attr not in kwargs:
-                # If a default value is set, use that
-                if getattr(self, attr, None) is not None:
-                    continue
+    def __init__(self, *args, **kwargs):
+        pass
 
-                try:
-                    value = cls()
-                except TypeError:
-                    value = None
-                setattr(self, attr, value)
-            else:
-                value = kwargs[attr]
-
-                try:
-                    is_model_class = issubclass(cls, Model) and isinstance(value, dict)
-                except TypeError:
-                    is_model_class = False
-
-                if is_model_class:
-                    value = cls(**value)
-
-                setattr(self, attr, value)
+    # def __init__(self, **kwargs):
+    #     for attr, cls in get_type_hints(self.__class__).items():
+    #         # Convert types
+    #         try:
+    #             if isinstance(cls, _GenericAlias):
+    #                 if cls._name == 'List':
+    #                     cls = list
+    #                 elif cls._name == 'Dict':
+    #                     cls = dict
+    #         except TypeError as e:
+    #             pass
+    #
+    #         if attr not in kwargs:
+    #             args = []
+    #             # If a default value is set, use that
+    #             default_val = getattr(self, attr, None)
+    #             if default_val is not None:
+    #                 args.append(default_val)
+    #
+    #             try:
+    #                 value = cls(*args)
+    #             except TypeError:
+    #                 value = None
+    #             setattr(self, attr, value)
+    #         else:
+    #             value = kwargs[attr]
+    #
+    #             try:
+    #                 is_model_class = issubclass(cls, Model) and isinstance(value, dict)
+    #             except TypeError:
+    #                 is_model_class = False
+    #
+    #             if is_model_class:
+    #                 value = cls(**value)
+    #
+    #             setattr(self, attr, value)
 
     @classmethod
     def attributes(cls) -> tuple:

@@ -91,7 +91,7 @@ class DynamoAPI(BaseAPI):
 
         # Build condition to ensure the unique key does not exist
         resource: Dict[str, str] = {}
-        conditions = self.filtering.filter(user, None)
+        conditions = self.filtering.filter(user, action=self.filtering.FILTER_ACTION_CREATE)
         for schema in self.data_table.key_schema:
             resource.update({schema['AttributeName']: data.get(schema['AttributeName'])})
             conditions = self.filtering.And(
@@ -191,7 +191,7 @@ class DynamoAPI(BaseAPI):
         self.validate_update(user, data)
 
         # Add in the user's permissions
-        user_conditions = self.filtering.filter(user)
+        user_conditions = self.filtering.filter(user, action=self.filtering.FILTER_ACTION_UPDATE)
         if user_conditions:
             if base_conditions:
                 base_conditions &= user_conditions
@@ -532,7 +532,7 @@ class DynamoAPI(BaseAPI):
                 condition = cond
 
         # Add in the user's permissions
-        user_conditions = self.filtering.filter(user)
+        user_conditions = self.filtering.filter(user, action=self.filtering.FILTER_ACTION_DELETE)
         if user_conditions:
             if condition:
                 condition &= user_conditions

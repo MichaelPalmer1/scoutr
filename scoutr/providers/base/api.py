@@ -420,7 +420,9 @@ class BaseAPI:
             ),
             action=action,
             method=request.method,
-            path=request.path
+            path=request.path,
+            query_params=request.query_params,
+            body=request.body
         )
 
         # Add expiry time for read events
@@ -428,13 +430,8 @@ class BaseAPI:
             expire_time = now + timedelta(days=self.config.log_retention_days)
             audit_log.expire_time = int(expire_time.timestamp())
 
-        if request.query_params:
-            audit_log.query_params = request.query_params
-
         # Add body
-        if request.body:
-            audit_log.body = request.body
-        elif changes:
+        if changes:
             audit_log.body = changes
 
         # Add resource

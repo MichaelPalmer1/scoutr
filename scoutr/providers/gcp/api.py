@@ -141,7 +141,7 @@ class FirestoreAPI(BaseAPI):
 
         # Add in the user's permissions
         filtering = GCPFiltering(self.data_table)
-        filtering.filter(user)
+        filtering.filter(user, action=filtering.FILTER_ACTION_UPDATE)
 
         # Get the existing item
         existing_item = filtering.query.stream()
@@ -414,7 +414,7 @@ class FirestoreAPI(BaseAPI):
 
         # Add in the user's permissions
         filtering = GCPFiltering(self.data_table)
-        filtering.filter(user)
+        filtering.filter(user, action=filtering.FILTER_ACTION_DELETE)
 
         # Perform the deletion
         try:
