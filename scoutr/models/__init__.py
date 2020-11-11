@@ -1,46 +1,48 @@
-from typing import get_type_hints, Dict, Any
+from typing import get_type_hints, Dict, Any, _GenericAlias
 
 
 class Model:
-    def __init__(self, *args, **kwargs):
-        pass
+    def __init__(self, **kwargs):
+        for attr, cls in get_type_hints(self.__class__).items():
+            # Convert types
+            try:
+                if isinstance(cls, _GenericAlias):
+                    if cls._name == 'List':
+                        cls = list
+                    elif cls._name == 'Dict':
+                        cls = dict
+            except TypeError:
+                pass
 
-    # def __init__(self, **kwargs):
-    #     for attr, cls in get_type_hints(self.__class__).items():
-    #         # Convert types
-    #         try:
-    #             if isinstance(cls, _GenericAlias):
-    #                 if cls._name == 'List':
-    #                     cls = list
-    #                 elif cls._name == 'Dict':
-    #                     cls = dict
-    #         except TypeError as e:
-    #             pass
-    #
-    #         if attr not in kwargs:
-    #             args = []
-    #             # If a default value is set, use that
-    #             default_val = getattr(self, attr, None)
-    #             if default_val is not None:
-    #                 args.append(default_val)
-    #
-    #             try:
-    #                 value = cls(*args)
-    #             except TypeError:
-    #                 value = None
-    #             setattr(self, attr, value)
-    #         else:
-    #             value = kwargs[attr]
-    #
-    #             try:
-    #                 is_model_class = issubclass(cls, Model) and isinstance(value, dict)
-    #             except TypeError:
-    #                 is_model_class = False
-    #
-    #             if is_model_class:
-    #                 value = cls(**value)
-    #
-    #             setattr(self, attr, value)
+            # Check if attribute is not in kwargs
+            if attr not in kwargs:
+                # If a default value is set, use that
+                args = []
+                default_val = getattr(self, attr, None)
+                if default_val is not None:
+                    args.append(default_val)
+
+                # Try to initialize the value
+                try:
+                    value = cls(*args)
+                except TypeError:
+                    value = None
+            else:
+                # Set value from kwargs
+                value = kwargs[attr]
+
+                # Detect if this is a Model class
+                try:
+                    is_model_class = issubclass(cls, Model) and isinstance(value, dict)
+                except TypeError:
+                    is_model_class = False
+
+                # Run Modal class constructor
+                if is_model_class:
+                    value = cls(**value)
+
+            # Set the attribute
+            setattr(self, attr, value)
 
     @classmethod
     def attributes(cls) -> tuple:
