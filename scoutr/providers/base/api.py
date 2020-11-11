@@ -27,6 +27,13 @@ class BaseAPI:
     unique_func: Callable[[List[Dict], str], List[str]] = \
         lambda data, key: sorted(set([item[key] for item in data if item]))
 
+    AUDIT_ACTION_CREATE = 'CREATE'
+    AUDIT_ACTION_UPDATE = 'UPDATE'
+    AUDIT_ACTION_LIST = 'LIST'
+    AUDIT_ACTION_GET = 'GET'
+    AUDIT_ACTION_SEARCH = 'SEARCH'
+    AUDIT_ACTION_DELETE = 'DELETE'
+
     def __init__(self, config: Config):
         self.config = config
 
@@ -328,7 +335,7 @@ class BaseAPI:
         return user
 
     def _prepare_list(self, request: Request, process_path_params: bool = True,
-                      process_search_keys: bool = True) -> (User, Dict[str, str]):
+                      process_search_keys: bool = True) -> Tuple[User, Dict[str, str]]:
         # Get user
         user = self.initialize_request(request)
 
@@ -420,7 +427,7 @@ class BaseAPI:
         )
 
         # Add expiry time for read events
-        if action in ('GET', 'LIST', 'SEARCH'):
+        if action in (self.AUDIT_ACTION_GET, self.AUDIT_ACTION_LIST, self.AUDIT_ACTION_SEARCH):
             expire_time = now + timedelta(days=self.config.log_retention_days)
             audit_log.expire_time = int(expire_time.timestamp())
 
@@ -502,7 +509,7 @@ class BaseAPI:
         raise NotImplementedError
 
     def history(self, request: Request, key: str, value: str,
-                actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
+                actions: tuple = (AUDIT_ACTION_CREATE, AUDIT_ACTION_UPDATE, AUDIT_ACTION_DELETE)) -> List[dict]:
         """
         Given a resource key and value, build the history of the item over time.
 
@@ -534,7 +541,7 @@ class BaseAPI:
         # Get the original record
         current_item: dict = {'data': {}, 'time': None}
         for item in logs:
-            if item['action'] == 'CREATE':
+            if item['action'] == self.AUDIT_ACTION_CREATE:
                 current_item['time'] = item['time']
                 current_item['data'] = item['body']
                 break
@@ -543,9 +550,9 @@ class BaseAPI:
         history = [current_item]
         for item in logs:
             # Skip creation calls
-            if item['action'] == 'CREATE':
+            if item['action'] == self.AUDIT_ACTION_CREATE:
                 continue
-            elif item['action'] == 'DELETE':
+            elif item['action'] == self.AUDIT_ACTION_DELETE:
                 history.insert(0, {'time': item['time'], 'data': {}})
                 continue
 

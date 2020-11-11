@@ -75,7 +75,7 @@ class DynamoAPI(BaseAPI):
         return items
 
     def create(self, request: Request, data: dict, validation: dict = None,
-               required_fields: Union[List, Tuple] = ()) -> dict:
+               required_fields: Union[List, Tuple] = (), condition=None, condition_failure_message='') -> dict:
         """
         Create an item
 
@@ -84,6 +84,8 @@ class DynamoAPI(BaseAPI):
         :param dict validation: Optional dictionary containing mappings of field name to callable. See the docstring
         in the _validate_fields method for more information.
         :param list required_fields: Optional list of required fields
+        :param condition: Optional condition expression to apply to PutItem call
+        :param str condition_failure_message: Optional condition failure message to use instead of the default
         :return: Created item
         :rtype: dict
         """
@@ -99,6 +101,13 @@ class DynamoAPI(BaseAPI):
                 Attr(schema['AttributeName']).not_exists()
             )
 
+        # Apply user's condition if it exists
+        if condition:
+            conditions = self.filtering.And(
+                conditions,
+                condition
+            )
+
         try:
             self.data_table.put_item(Item=data, ConditionExpression=conditions)
             logger.info('[%(user)s] Successfully created item:\n%(item)s' % {
@@ -111,7 +120,10 @@ class DynamoAPI(BaseAPI):
                     'user': self.user_identifier(user),
                     'item': data
                 })
-                raise BadRequestException('Item already exists or you do not have permission to create it.')
+                if condition_failure_message:
+                    raise BadRequestException(condition_failure_message)
+                else:
+                    raise BadRequestException('Item already exists or you do not have permission to create it.')
             elif e.response['Error']['Code'] == 'ValidationException':
                 logger.error('[%(user)s] Validation error - %(error)s:\n%(item)s' % {
                     'user': self.user_identifier(user),
@@ -142,12 +154,12 @@ class DynamoAPI(BaseAPI):
         sentry_sdk.add_breadcrumb(category='data', message='Created item', level='info')
 
         # Create audit log
-        self.audit_log(action='CREATE', resource=resource, request=request, user=user)
+        self.audit_log(action=self.AUDIT_ACTION_CREATE, resource=resource, request=request, user=user)
 
         return resource
 
     def update(self, request: Request, primary_key: dict, data: dict, validation: dict = None, condition=None,
-               condition_failure_message='', audit_action='UPDATE') -> dict:
+               condition_failure_message='', audit_action=BaseAPI.AUDIT_ACTION_UPDATE) -> dict:
         """
         Update an item
 
@@ -171,7 +183,8 @@ class DynamoAPI(BaseAPI):
 
         # Validate audit action
         audit_action = audit_action.upper()
-        if audit_action in ('CREATE', 'DELETE', 'GET', 'LIST', 'SEARCH'):
+        if audit_action in (self.AUDIT_ACTION_CREATE, self.AUDIT_ACTION_DELETE,
+                            self.AUDIT_ACTION_GET, self.AUDIT_ACTION_LIST, self.AUDIT_ACTION_SEARCH):
             raise Exception('%s is a reserved built-in audit action' % audit_action)
 
         # Get the existing item / make sure it actually exists and user has permission to access it
@@ -327,7 +340,7 @@ class DynamoAPI(BaseAPI):
         output = self.post_process(data, user)[0]
 
         # Item was found, return the single item
-        self.audit_log(action='GET', request=request, user=user, resource={key: value})
+        self.audit_log(action=self.AUDIT_ACTION_GET, request=request, user=user, resource={key: value})
         return output
 
     def list(self, request: Request) -> List[dict]:
@@ -340,15 +353,38 @@ class DynamoAPI(BaseAPI):
         """
         user, params = self._prepare_list(request)
 
+        # Build filters
         args = {}
         conditions = self.filtering.filter(user, params)
         if conditions:
             args.update({'FilterExpression': conditions})
 
-        data = self._scan(self.data_table, **args)
+        try:
+            # Scan the table
+            data = self._scan(self.data_table, **args)
+        except ClientError as e:
+            logger.error(
+                '[%(user)s] Encountered error while attempting to list records: [%(code)s] %(error)s' % {
+                    'user': self.user_identifier(user),
+                    'code': e.response['Error']['Code'],
+                    'error': e.response['Error']['Message']
+                }
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                '[%(user)s] Encountered error while attempting to list records: %(error)s' % {
+                    'user': self.user_identifier(user),
+                    'error': str(e)
+                }
+            )
+            raise
+
+        # Perform post processing
         data = self.post_process(data, user)
 
-        self.audit_log('LIST', request, user)
+        # Add audit log
+        self.audit_log(self.AUDIT_ACTION_LIST, request, user)
 
         return data
 
@@ -390,7 +426,7 @@ class DynamoAPI(BaseAPI):
         output = unique_func(data, key)
 
         # Create audit log
-        self.audit_log('LIST', request, user)
+        self.audit_log(self.AUDIT_ACTION_LIST, request, user)
 
         return output
 
@@ -496,7 +532,7 @@ class DynamoAPI(BaseAPI):
             output.extend(data)
 
         # Create audit log
-        self.audit_log(action='SEARCH', request=request, user=user)
+        self.audit_log(action=self.AUDIT_ACTION_SEARCH, request=request, user=user)
 
         # Return the filtered response
         return self.post_process(output, user)
@@ -579,7 +615,7 @@ class DynamoAPI(BaseAPI):
 
         # Create audit log
         self.audit_log(
-            action='DELETE',
+            action=self.AUDIT_ACTION_DELETE,
             request=request,
             user=user,
             resource=primary_key,
