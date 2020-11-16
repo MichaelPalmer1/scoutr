@@ -188,7 +188,7 @@ class DynamoAPI(BaseAPI):
             raise Exception('%s is a reserved built-in audit action' % audit_action)
 
         # Add in the user's permissions
-        conditions = self.filtering.filter(user, action=self.filtering.FILTER_ACTION_READ)
+        conditions = self.filtering.filter(user, action=self.filtering.FILTER_ACTION_UPDATE)
 
         # Get the existing item / make sure it actually exists and user has permission to access it
         for key, value in primary_key.items():
