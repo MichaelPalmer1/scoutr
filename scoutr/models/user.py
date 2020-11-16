@@ -9,12 +9,6 @@ class FilterField(Model):
     operator: str = 'eq'
     value: Union[List, str]
 
-    # def __init__(self, field: str, value: Union[str, List[str]], operator: str = 'eq'):
-    #     super().__init__()
-    #     self.field = field
-    #     self.operator = operator
-    #     self.value = value
-
     @classmethod
     def load(cls, data: Dict[str, Any]):
         filter_field = super(FilterField, cls).load(data)
@@ -37,11 +31,6 @@ class FilterField(Model):
 class PermittedEndpoints(Model):
     endpoint: str
     method: str
-
-    # def __init__(self, endpoint: str, method: str):
-    #     super().__init__()
-    #     self.endpoint = endpoint
-    #     self.method = method
 
     @classmethod
     def load(cls, data: Dict[str, str]):
@@ -71,15 +60,6 @@ class Permissions(Model):
                  delete_filters: List[dict] = None, exclude_fields: List[str] = None,
                  update_fields_permitted: List[str] = None, update_fields_restricted: List[str] = None, **kwargs):
         super(Permissions, self).__init__(**kwargs)
-
-        # self.permitted_endpoints = []
-        # self.read_filters = []
-        # self.create_filters = []
-        # self.update_filters = []
-        # self.delete_filters = []
-        # self.exclude_fields = []
-        # self.update_fields_permitted = []
-        # self.update_fields_restricted = []
 
         if not read_filters:
             read_filters = []
@@ -125,19 +105,6 @@ class User(Permissions):
     email: str
     groups: List[str]
 
-    # def __init__(self, id: str, name: str = '', username: str = '', email: str = '',
-    #              groups: List[str] = None, **kwargs):
-    #     self.id = id
-    #     self.name = name
-    #     self.username = username
-    #     self.email = email
-    #     self.groups = groups or []
-    #     super(User, self).__init__(**kwargs)
-
 
 class Group(Permissions):
     id: str
-
-    # def __init__(self, id: str, **kwargs):
-    #     self.id = id
-    #     super(Group, self).__init__(**kwargs)
