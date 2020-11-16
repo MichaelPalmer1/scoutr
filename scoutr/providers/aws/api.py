@@ -187,34 +187,21 @@ class DynamoAPI(BaseAPI):
                             self.AUDIT_ACTION_GET, self.AUDIT_ACTION_LIST, self.AUDIT_ACTION_SEARCH):
             raise Exception('%s is a reserved built-in audit action' % audit_action)
 
-        # Get the existing item / make sure it actually exists and user has permission to access it
-        base_conditions = None
-        for key, value in primary_key.items():
-            # Check if the partition key is specified in the data input
-            if key in data:
-                raise BadRequestException('Partition key cannot be updated')
-
-            cond = Attr(key).eq(value)
-            if base_conditions:
-                base_conditions &= cond
-            else:
-                base_conditions = cond
-
-        # Check user update permissions
-        self.validate_update(user, data)
-
         # Add in the user's permissions
-        user_conditions = self.filtering.filter(user, action=self.filtering.FILTER_ACTION_UPDATE)
-        if user_conditions:
-            if base_conditions:
-                base_conditions &= user_conditions
-            else:
-                base_conditions = user_conditions
+        conditions = self.filtering.filter(user, action=self.filtering.FILTER_ACTION_READ)
+
+        # Get the existing item / make sure it actually exists and user has permission to access it
+        for key, value in primary_key.items():
+            # Check if the primary key is specified in the data input
+            if key in data:
+                raise BadRequestException('Primary key cannot be updated')
+
+            conditions = self.filtering.And(conditions, Attr(key).eq(value))
 
         # Get the existing item
-        existing_item = self._scan(self.data_table, FilterExpression=base_conditions)
+        existing_item = self._scan(self.data_table, FilterExpression=conditions)
         if len(existing_item) == 0:
-            logger.info('[%(user)s] Partition key "%(primary_key)s" does not exist or user does '
+            logger.info('[%(user)s] Primary key "%(primary_key)s" does not exist or user does '
                         'not have permission to access it' % {
                             'user': self.user_identifier(user),
                             'primary_key': primary_key
@@ -226,6 +213,9 @@ class DynamoAPI(BaseAPI):
 
         # Found the item
         existing_item = existing_item[0]
+
+        # Check user update permissions
+        self.validate_update(user, data, existing_item)
 
         # Perform field validation
         if validation:
@@ -557,27 +547,22 @@ class DynamoAPI(BaseAPI):
         if condition:
             default_condition_message = 'Conditional check failed'
         else:
-            default_condition_message = 'Item does not exist'
+            default_condition_message = 'Item does not exist or you do not have permission to delete it'
+
+        # Add in the user's permissions
+        conditions = self.filtering.filter(user, action=self.filtering.FILTER_ACTION_DELETE)
+
+        # Add in the conditional expression from the user
+        if condition:
+            conditions = self.filtering.And(conditions, condition)
 
         # Default conditional expression to make sure the item actually exists
         for key, value in primary_key.items():
-            cond = Attr(key).eq(value)
-            if condition:
-                condition &= cond
-            else:
-                condition = cond
-
-        # Add in the user's permissions
-        user_conditions = self.filtering.filter(user, action=self.filtering.FILTER_ACTION_DELETE)
-        if user_conditions:
-            if condition:
-                condition &= user_conditions
-            else:
-                condition = user_conditions
+            conditions = self.filtering.And(conditions, Attr(key).eq(value))
 
         # Perform the deletion
         try:
-            self.data_table.delete_item(Key=primary_key, ConditionExpression=condition)
+            self.data_table.delete_item(Key=primary_key, ConditionExpression=conditions)
             logger.info('[%(user)s] Successfully deleted record "%(primary_key)s"' % {
                 'user': self.user_identifier(user),
                 'primary_key': primary_key,

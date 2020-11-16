@@ -166,14 +166,11 @@ class MongoAPI(BaseAPI):
         if self.config.primary_key in data:
             raise BadRequestException('Primary key %s cannot be updated' % self.config.primary_key)
 
-        # Validate update
-        self.validate_update(user, data)
-
         # Add in the user's permissions
         conditions = self.filtering.filter(
             user,
             {'_id': primary_key[self.config.primary_key]},
-            action=self.filtering.FILTER_ACTION_UPDATE
+            action=self.filtering.FILTER_ACTION_READ
         )
 
         # Get the existing item
@@ -191,6 +188,9 @@ class MongoAPI(BaseAPI):
 
         # Found the item
         existing_item = existing_item[0]
+
+        # Validate update
+        self.validate_update(user, data, existing_item)
 
         # Perform field validation
         if validation:

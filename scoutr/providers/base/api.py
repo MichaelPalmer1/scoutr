@@ -330,7 +330,7 @@ class BaseAPI:
         # Creation filters
         local_filter = LocalFiltering(data)
         if local_filter.filter(user, action=local_filter.FILTER_ACTION_CREATE) is False:
-            raise BadRequestException(f'Unauthorized value(s) for field(s): {local_filter.failed_filters}')
+            raise UnauthorizedException(f'Unauthorized value(s) for field(s): {local_filter.failed_filters}')
 
         return user
 
@@ -358,12 +358,13 @@ class BaseAPI:
         return user, params
 
     @staticmethod
-    def validate_update(user: User, data: dict):
+    def validate_update(user: User, data: dict, existing_item: dict):
         """
         Make sure the user has permission to update all of the fields specified
 
         :param User user: User object
         :param dict data: Data object
+        :param dict existing_item: Existing object
         :raises UnauthorizedException
         """
         if user.update_fields_permitted:
@@ -378,6 +379,14 @@ class BaseAPI:
             unauthorized_fields = set(data.keys()).intersection(set(user.update_fields_restricted))
             if unauthorized_fields:
                 raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
+
+        combined_object = existing_item.copy()
+        combined_object.update(data)
+
+        # Update filters
+        local_filter = LocalFiltering(combined_object)
+        if local_filter.filter(user, action=local_filter.FILTER_ACTION_UPDATE) is False:
+            raise UnauthorizedException(f'Unauthorized value(s) for field(s): {local_filter.failed_filters}')
 
     def post_process(self, data: List[dict], user: User) -> List[dict]:
         # If no filtering is necessary, return output
@@ -446,25 +455,6 @@ class BaseAPI:
         if not self.store_item(self.config.audit_table, item):
             print('Failed to store audit log')
             print('Failed audit log', item)
-
-    @classmethod
-    def value_in_set(cls, value: str, valid_options: Set[str], option_name: str = 'option',
-                     custom_error_message: str = ''):
-        """
-        Check if a value is contained in a list of valid options. This is supplied as a convenience function
-        and is intended to be used with the input field validation on creates/updates.
-
-        :param str value: Value to check
-        :param set of str valid_options: List of options that the value should be included in for this to be successful
-        :param str option_name: Optional descriptive name of the option that can be used to enrich an error message.
-        :param str custom_error_message: Optional custom error message to return instead of the default one.
-        :return: Dictionary that can be used with the field_validation
-        :rtype: dict
-        """
-        return {
-            'result': value in valid_options,
-            'message': custom_error_message or f'{value} is not a valid {option_name}. Valid options: {valid_options}'
-        }
 
     @staticmethod
     def user_identifier(user: User):

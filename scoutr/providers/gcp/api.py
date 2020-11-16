@@ -138,12 +138,9 @@ class FirestoreAPI(BaseAPI):
         if self.config.primary_key in data:
             raise BadRequestException('Primary key %s cannot be updated' % self.config.primary_key)
 
-        # Validate update
-        self.validate_update(user, data)
-
         # Add in the user's permissions
         filtering = GCPFiltering(self.data_table)
-        filtering.filter(user, action=filtering.FILTER_ACTION_UPDATE)
+        filtering.filter(user, action=filtering.FILTER_ACTION_READ)
 
         # Get the existing item
         existing_item = filtering.query.stream()
@@ -160,6 +157,9 @@ class FirestoreAPI(BaseAPI):
 
         # Found the item
         existing_item = existing_item[0]
+
+        # Validate update
+        self.validate_update(user, data, existing_item)
 
         # Perform field validation
         if validation:
