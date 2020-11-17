@@ -373,10 +373,14 @@ class BaseAPI:
             unauthorized_fields = set(data.keys()).difference(set(user.update_fields_permitted))
             if unauthorized_fields:
                 raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
-        elif user.update_fields_restricted:
+
+        # Combine both exclude_fields and update_fields_restricted together. If the user can't see the field, they don't
+        # have permission to update the field.
+        restricted_fields = set(user.exclude_fields + user.update_fields_restricted)
+        if restricted_fields:
             # User is restricted from updating certain fields. Determine list of fields the user
             # is not authorized to update.
-            unauthorized_fields = set(data.keys()).intersection(set(user.update_fields_restricted))
+            unauthorized_fields = set(data.keys()).intersection(restricted_fields)
             if unauthorized_fields:
                 raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
 
