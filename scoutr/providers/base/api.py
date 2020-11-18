@@ -25,7 +25,7 @@ except ImportError:
 class BaseAPI:
     filtering: Filtering
     unique_func: Callable[[List[Dict], str], List[str]] = \
-        lambda data, key: sorted(set([item[key] for item in data if item]))
+        lambda data, key: sorted(set([item[key] for item in data if item and item[key]]))
 
     AUDIT_ACTION_CREATE = 'CREATE'
     AUDIT_ACTION_UPDATE = 'UPDATE'
