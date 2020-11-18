@@ -17,6 +17,7 @@ try:
     import sentry_sdk
 except ImportError:
     from scoutr.utils import mock_sentry
+
     sentry_sdk = mock_sentry
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class DynamoAPI(BaseAPI):
         self.group_table = resource.Table(self.config.group_table)
         self.audit_table = resource.Table(self.config.audit_table)
 
-    def get_auth(self, user_id: str, skip_validation=False) -> Optional[User]:
+    def get_auth(self, user_id: str) -> Optional[User]:
         # Try to find user in the auth table
         result = self.auth_table.get_item(Key={'id': user_id})
 
@@ -43,7 +44,47 @@ class DynamoAPI(BaseAPI):
             return None
 
         # Create user object
-        return User.load(result['Item'], skip_validation=skip_validation)
+        return User.load(result['Item'])
+
+    def get_entitlements(self, entitlement_ids: List[str]) -> List[User]:
+        start_index = 0
+        conditions = None
+
+        # IN expressions are limited to 100 items each
+        for end_index in range(0, len(entitlement_ids), 100):
+            # Create a slice of 100 items
+            items = entitlement_ids[start_index:end_index]
+
+            # Skip if no items are in this slice
+            if not items:
+                continue
+
+            # Create IN expression
+            expr = Attr('id').is_in(items)
+
+            # Combine with conditions using OR
+            if conditions:
+                conditions |= expr
+            else:
+                conditions = expr
+
+            # Set new start index
+            start_index = end_index
+
+        # Add any extra items at the end
+        if len(entitlement_ids[end_index:]) > 0:
+            conditions |= Attr('id').is_in(entitlement_ids[end_index:])
+
+        # Scan for the entitlement ids
+        results = self._scan(self.auth_table, FilterExpression=conditions)
+
+        # Convert to User instances
+        entitlements: List[User] = []
+        for item in results:
+            auth = User.load(item, skip_validation=True)
+            entitlements.append(auth)
+
+        return entitlements
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table

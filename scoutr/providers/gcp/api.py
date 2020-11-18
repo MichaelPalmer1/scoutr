@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Optional, Any, Callable, Union, Tuple
 
 from firebase_admin import firestore
-from google.cloud.firestore_v1 import Client, DocumentSnapshot, CollectionReference
+from google.cloud.firestore_v1 import Client, DocumentSnapshot, CollectionReference, Query
 
 from scoutr.exceptions import NotFoundException, BadRequestException
 from scoutr.models.config import Config
@@ -30,7 +30,7 @@ class FirestoreAPI(BaseAPI):
         self.auth_table: CollectionReference = self.db.collection(self.config.auth_table)
         self.group_table: CollectionReference = self.db.collection(self.config.group_table)
 
-    def get_auth(self, user_id: str, skip_validation: bool = False) -> Optional[User]:
+    def get_auth(self, user_id: str) -> Optional[User]:
         # Try to find user in the auth table
         result = self.auth_table.document(user_id).get()
 
@@ -38,7 +38,15 @@ class FirestoreAPI(BaseAPI):
             return None
 
         # Create user object
-        return User.load(result.to_dict(), skip_validation=skip_validation)
+        return User.load(result.to_dict())
+
+    def get_entitlements(self, entitlement_ids: List[str]) -> List[User]:
+        entitlements = []
+        for result in Query(self.auth_table).where('id', 'in', entitlement_ids).stream():
+            record = result.to_dict()
+            record['id'] = result.id
+            entitlements.append(User.load(record))
+        return entitlements
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table

@@ -35,7 +35,7 @@ class MongoAPI(BaseAPI):
         self.group_table = self.db.get_collection(self.config.group_table)
         self.audit_table = self.db.get_collection(self.config.audit_table)
 
-    def get_auth(self, user_id: str, skip_validation: bool = False) -> Optional[User]:
+    def get_auth(self, user_id: str) -> Optional[User]:
         # Try to find user in the auth table
         result = self.auth_table.find_one(user_id)
 
@@ -43,7 +43,24 @@ class MongoAPI(BaseAPI):
             return None
 
         # Create user object
-        return User.load(result, skip_validation=skip_validation)
+        return User.load(result)
+
+    def get_entitlements(self, entitlement_ids: List[str]) -> List[User]:
+        entitlements = []
+        conditions = self.filtering.is_in('id', entitlement_ids)
+
+        for record in self.data_table.find(conditions):
+            # Convert ObjectId to string if necessary
+            if isinstance(record['_id'], ObjectId):
+                record['_id'] = str(record['_id'])
+
+            # Overwrite the id
+            record['id'] = record['_id']
+
+            # Add the record
+            entitlements.append(User.load(record))
+
+        return entitlements
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table

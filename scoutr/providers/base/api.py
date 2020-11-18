@@ -99,14 +99,10 @@ class BaseAPI:
         # Try to find supplied entitlements in the auth table
         entitlement_ids: List[str] = []
         if user_data and user_data.groups:
-            for group_id in user_data.groups:
-                entitlement = self.get_auth(group_id, skip_validation=True)
-                if not entitlement:
-                    # Entitlement not in the auth table
-                    continue
-
+            entitlements = self.get_entitlements(user_data.groups)
+            for entitlement in entitlements:
                 # Store this as a real entitlement
-                entitlement_ids.append(group_id)
+                entitlement_ids.append(entitlement.id)
 
                 # Add sub-groups
                 user.groups.extend(entitlement.groups)
@@ -226,7 +222,7 @@ class BaseAPI:
 
             # User is authorized to access this endpoint
             return
-        
+
         # Make sure query params have keys and values
         if set(req.query_params.keys()).intersection(['']) or set(req.query_params.values()).intersection(['']):
             raise BadRequestException('Query strings must have keys and values')
@@ -467,7 +463,11 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def get_auth(self, user_id: str, skip_validation: bool = False) -> Optional[User]:
+    def get_auth(self, user_id: str) -> Optional[User]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_entitlements(self, entitlement_ids: List[str]) -> List[User]:
         raise NotImplementedError
 
     @abstractmethod
