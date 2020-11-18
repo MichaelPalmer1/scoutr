@@ -100,10 +100,8 @@ class BaseAPI:
         entitlement_ids: List[str] = []
         if user_data and user_data.groups:
             for group_id in user_data.groups:
-                entitlement = self.get_auth(group_id)
+                entitlement = self.get_auth(group_id, skip_validation=True)
                 if not entitlement:
-                    print('Failed to get entitlement')
-
                     # Entitlement not in the auth table
                     continue
 
@@ -469,7 +467,7 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def get_auth(self, user_id: str) -> Optional[User]:
+    def get_auth(self, user_id: str, skip_validation: bool = False) -> Optional[User]:
         raise NotImplementedError
 
     @abstractmethod

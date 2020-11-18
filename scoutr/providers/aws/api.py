@@ -35,7 +35,7 @@ class DynamoAPI(BaseAPI):
         self.group_table = resource.Table(self.config.group_table)
         self.audit_table = resource.Table(self.config.audit_table)
 
-    def get_auth(self, user_id: str) -> Optional[User]:
+    def get_auth(self, user_id: str, skip_validation=False) -> Optional[User]:
         # Try to find user in the auth table
         result = self.auth_table.get_item(Key={'id': user_id})
 
@@ -43,7 +43,7 @@ class DynamoAPI(BaseAPI):
             return None
 
         # Create user object
-        return User.load(result['Item'])
+        return User.load(result['Item'], skip_validation=skip_validation)
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table

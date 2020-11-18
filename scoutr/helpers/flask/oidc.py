@@ -3,6 +3,7 @@ from typing import List
 
 from flask_api.request import APIRequest
 
+from scoutr.exceptions import UnauthorizedException
 from scoutr.models.request import Request, UserData, RequestUser
 from scoutr.providers.base.api import BaseAPI
 
@@ -47,6 +48,10 @@ def get_user_from_oidc(api: BaseAPI, request: APIRequest) -> RequestUser:
         ]) or None
     else:
         name = request.headers.get(api.config.oidc_name_header)
+
+    username = request.headers.get(api.config.oidc_username_header)
+    if not username:
+        raise UnauthorizedException('Unable to determine user id')
 
     user_data = UserData(
         name=name,

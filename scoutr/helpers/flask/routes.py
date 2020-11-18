@@ -6,7 +6,7 @@ from flask_api import FlaskAPI
 from flask_api.exceptions import ParseError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from scoutr.helpers.flask.oidc import get_user_from_oidc, build_oidc_request
+from scoutr.helpers.flask.oidc import build_oidc_request
 from scoutr.helpers.flask.utils import init_flask_user, flaskapi_exception_wrapper
 from scoutr.providers.base.api import BaseAPI
 
@@ -32,14 +32,11 @@ def init_flask(api: BaseAPI, primary_list_endpoint: str, history_actions: Tuple[
     app.wsgi_app = ProxyFix(app.wsgi_app)
     app.json_encoder = simplejson.JSONEncoder
 
-    @app.before_request
-    def before_request():
-        request.user = init_flask_user(api, request)
-
     @app.route('/user/', methods=['GET'])
     @flaskapi_exception_wrapper
     def get_user():
-        return request.user.dict()
+        user = init_flask_user(api, request)
+        return user.dict()
 
     @app.route('/user/has-permission/', methods=['POST'])
     @flaskapi_exception_wrapper
@@ -47,12 +44,15 @@ def init_flask(api: BaseAPI, primary_list_endpoint: str, history_actions: Tuple[
         if 'method' not in request.data or 'path' not in request.data:
             raise ParseError("Body should contain 'method' and 'path' keys")
 
+        # Build OIDC request
+        req = build_oidc_request(api, request)
+
         return {
             'authorized': api.can_access_endpoint(
                 method=request.data['method'],
                 path=request.data['path'],
-                user=request.user,
-                request=build_oidc_request(api, request)
+                user=req.user,
+                request=req
             )
         }
 

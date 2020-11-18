@@ -30,7 +30,7 @@ class FirestoreAPI(BaseAPI):
         self.auth_table: CollectionReference = self.db.collection(self.config.auth_table)
         self.group_table: CollectionReference = self.db.collection(self.config.group_table)
 
-    def get_auth(self, user_id: str) -> Optional[User]:
+    def get_auth(self, user_id: str, skip_validation: bool = False) -> Optional[User]:
         # Try to find user in the auth table
         result = self.auth_table.document(user_id).get()
 
@@ -38,7 +38,7 @@ class FirestoreAPI(BaseAPI):
             return None
 
         # Create user object
-        return User.load(result.to_dict())
+        return User.load(result.to_dict(), skip_validation=skip_validation)
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table

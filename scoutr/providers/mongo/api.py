@@ -35,7 +35,7 @@ class MongoAPI(BaseAPI):
         self.group_table = self.db.get_collection(self.config.group_table)
         self.audit_table = self.db.get_collection(self.config.audit_table)
 
-    def get_auth(self, user_id: str) -> Optional[User]:
+    def get_auth(self, user_id: str, skip_validation: bool = False) -> Optional[User]:
         # Try to find user in the auth table
         result = self.auth_table.find_one(user_id)
 
@@ -43,7 +43,7 @@ class MongoAPI(BaseAPI):
             return None
 
         # Create user object
-        return User.load(result)
+        return User.load(result, skip_validation=skip_validation)
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table

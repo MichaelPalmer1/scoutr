@@ -67,18 +67,28 @@ class Model:
         return output
 
     @classmethod
-    def load(cls, data: Dict[str, Any]):
-        valid_attributes = set(cls.attributes())
+    def load(cls, data: Dict[str, Any], skip_validation=False):
+        model = cls(**data)
+        if not skip_validation:
+            model.validate()
+
+        return model
+
+    def validate(self):
+        valid_attributes = set(self.attributes())
 
         # Compile list of required fields (fields that default to None)
         required_fields = set()
         for attr in valid_attributes:
-            if getattr(cls, attr, None) is None:
+            if getattr(self.__class__, attr, None) is None:
                 required_fields.add(attr)
 
-        # Make sure required fields have values
-        missing_fields = required_fields - set(data)
-        if missing_fields:
-            raise Exception(f'Missing required fields on {cls.__name__}: {missing_fields}')
+        # Compile list of fields that have values
+        missing_fields = set()
+        for attr in valid_attributes:
+            if getattr(self, attr, None) is None:
+                missing_fields.add(attr)
 
-        return cls(**data)
+        # Make sure required fields have values
+        if missing_fields:
+            raise Exception(f'Missing required fields on {self.__class__.__name__}: {missing_fields}')
