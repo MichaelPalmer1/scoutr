@@ -33,8 +33,14 @@ def get_user_from_oidc(api: BaseAPI, request: APIRequest) -> RequestUser:
         else:
             groups = group_string.split(',')
 
+    # Permit tuples for the name header in case the name is split into first and last name
+    if isinstance(api.config.oidc_name_header, tuple):
+        name = ' '.join([request.headers.get(header) for header in api.config.oidc_name_header])
+    else:
+        name = request.headers.get(api.config.oidc_name_header)
+
     user_data = UserData(
-        name=request.headers.get(api.config.oidc_username_header),
+        name=name,
         email=request.headers.get(api.config.oidc_username_header),
         username=request.headers.get(api.config.oidc_username_header),
         groups=groups

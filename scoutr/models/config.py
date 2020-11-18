@@ -1,3 +1,6 @@
+from typing import Tuple, Union
+
+
 class Config:
     data_table: str
     auth_table: str
@@ -6,13 +9,14 @@ class Config:
     primary_key: str = 'id'
     log_retention_days: int = 30
     oidc_username_header: str = ''
-    oidc_name_header: str = ''
+    oidc_name_header: Union[str, Tuple[str, str]] = ''
     oidc_email_header: str = ''
     oidc_group_header: str = ''
 
     def __init__(self, data_table: str, auth_table: str, group_table: str, audit_table: str = '',
                  primary_key: str = 'id', log_retention_days: int = 30, oidc_username_header: str = '',
-                 oidc_name_header: str = '', oidc_email_header: str = '', oidc_group_header: str = ''):
+                 oidc_name_header: Union[str, Tuple[str, str]] = '', oidc_email_header: str = '',
+                 oidc_group_header: str = ''):
         self.data_table = data_table
         self.auth_table = auth_table
         self.audit_table = audit_table
@@ -31,7 +35,7 @@ class MongoConfig(Config):
 
     def __init__(self, connection_string: str, database: str, data_table: str, auth_table: str, group_table: str,
                  audit_table: str = '', primary_key: str = 'id', log_retention_days: int = 30,
-                 oidc_username_header: str = '', oidc_name_header: str = '',
+                 oidc_username_header: str = '', oidc_name_header: Union[str, Tuple[str, str]] = '',
                  oidc_email_header: str = '', oidc_group_header: str = ''):
         super(MongoConfig, self).__init__(
             data_table=data_table,
