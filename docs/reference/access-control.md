@@ -13,7 +13,8 @@ Refer to the [Authentication](../authentication) section to learn about the supp
 Field filters are used to perform pre-filtering of the data before it gets returned to the user and to affect what
 records users are able to manipulate.
 
-### Syntax
+**Syntax**
+
 Each field filter should be a list of objects. Each item in this list must be structured as:
 
 ```json
@@ -24,7 +25,9 @@ Each field filter should be a list of objects. Each item in this list must be st
 }
 ```
 
-The supported operators are listed on the [filtering page](../filtering#magic-operators).
+!!! info
+    The supported operators are listed on the [filtering page](../filtering#magic-operators). If you specify an invalid
+    operator, an error will be returned whenever that user attempts to perform a request.
 
 When using the `in` operator to check multiple values, the `value` field should be formatted as an array like below:
 ```json
@@ -43,13 +46,24 @@ When using the `in` operator to check multiple values, the `value` field should 
 There are four types of field filters: read, create, update, and delete filters.
 
 #### Read Filters
-Read filters are used to configure what data is returned from the data table, prior to any user filtering.
+Read filters are used to configure what data is returned from the data table, prior to any user-requested filters.
+Refer to the [filter merging](#filter-merging) section for more information on how read filters work.
 
 #### Create Filters
 Create filters are used to configure conditions that must be satisfied for a user to create a record in the data table.
 This ensures that a user has permission to set the fields they have included in their request body. If the filter
 criteria fails, then the request will be denied with an Unauthorized error. The final step is to run
 [field validation](../validation).
+
+The checks are performed as follows:
+
+1. Ensure the user has permissions to set the fields they have included in their request body using the values in
+    `exclude_fields`. The idea is that if the user does not have permission to view a field, they also do not have
+    permission to set the value of that field. If any matches are found, the request will be denied.
+2. Run [field validation](../validation) as normal
+3. Run the `create_filters` against the request body. This will determine if the user has permission to create a record
+    with the values they have specified. If the filter criteria fails, the request will be denied with an Unauthorized
+    error stating which fields have invalid values.
 
 ##### Example
 
@@ -305,7 +319,8 @@ Field exclusions allow for excluding one or more fields from the output of all q
 during the post-processing phase of all queries. Additionally, if a user attempts to create or update an item that
 contains a field from this list, the operation will be denied.
 
-### Syntax
+**Syntax**
+
 ```json
 [
     "field1",
@@ -318,7 +333,8 @@ contains a field from this list, the operation will be denied.
 Before taking any action, every call is validated to ensure the user has permissions to perform the call. For
 convenience, regular expressions can be used within the `endpoint` field.
 
-### Syntax
+**Syntax**
+
 ```json
 [
     {"method": "GET|POST|PUT|DELETE", "endpoint": "/endpoint"},

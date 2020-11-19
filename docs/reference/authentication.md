@@ -18,7 +18,7 @@ It is assumed that there is an Apache server running in front of the application
 and passes the OIDC claims as headers.
 
 The simplest method to setup the API is to use [Flask API](https://www.flaskapi.org/). Helper methods have been
-provided to make the setup as simple as possible. The [`init_flask`](https://github.com/GESkunkworks/scoutr/blob/master/scoutr/flask/routes.py#L11) method
+provided to make the setup as simple as possible. The [`init_flask`](https://github.com/GESkunkworks/scoutr/blob/master/scoutr/helpers/flask/routes.py#L11) method
 automatically generates the belows endpoints:
 
 - GET `/user/` - Returns information about the authenticated user
