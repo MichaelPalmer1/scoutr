@@ -2,12 +2,12 @@ There are two levels of filtering that are supported:
 - Path-based filtering
 - Querystring-based filtering
 
-The `list_table()` method accepts both `path_params` and `query_params` as arguments. These are intended to
+The `list()` method accepts both `path_params` and `query_params` as arguments. These are intended to
 contain the values of `pathParameters` and `multiValueQueryStringParameters`, respectively, that API Gateway passed into Lambda.
 
 ## Dynamic path filters
 
-The `list_table()` method also supports dynamic path filtering. When `search_key` and `search_value` are passed into
+The `list()` method also supports dynamic path filtering. When `search_key` and `search_value` are passed into
 the method as `path_params`, it will dynamically modify the path parameters to construct a search filter where
 
 ```
@@ -51,7 +51,7 @@ the filter against.
 
 ## Querystring Filters
 
-In addition to path filters, querystring filtering is also supported. The `list_table()` endpoint accepts all
+In addition to path filters, querystring filtering is also supported. The `list()` endpoint accepts all
 querystrings via the `query_params` argument. Each querystring should be a `field_name=search_value` format:
 
 ```
@@ -73,8 +73,10 @@ field2 = value1 AND status = Active
 ### Magic Operators
 
 For more complex queries, querystring search supports the below magic operations:
+
 - `in` (value is in list)
 - `notin` (value is not in list)
+- `eq` (equal)
 - `ne` (not equal)
 - `startswith` (string starts with)
 - `contains` (string contains)

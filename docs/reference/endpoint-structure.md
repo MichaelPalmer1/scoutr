@@ -8,9 +8,9 @@ and that meet any specified filter criteria.
 ## List all unique values for a key
 
 The list by unique key endpoint is provided as a means to display all unique values for a single search key. It is
-implemented by specifying a value for the `unique_key` argument of the `list_table()` method. The simplest way to
-implement this without duplicating code is to use a `UniqueKey` environment variable that defaults to a value of `None`
-when the environment variable is not specified. Then, just configure your "list by unique key" Lambda with that
+implemented by specifying a value for the `unique_key` argument of the `list_unique_values()` method. The simplest way
+to implement this without duplicating code is to use a `UniqueKey` environment variable that defaults to a value of
+`None` when the environment variable is not specified. Then, just configure your "list by unique key" Lambda with that
 environment variable.
 
 ### Serverless Example
@@ -37,7 +37,7 @@ def lambda_handler(event, context):
         auth_table_name=os.getenv('AuthTable'),
         group_table_name=os.getenv('GroupTable')
     )
-    data = api.list_table(
+    data = api.list(
         request=build_api_gateway_request(event),
         unique_key=os.getenv('UniqueKey'),
         path_params=path_params,
@@ -74,8 +74,8 @@ information.
 
 The `update()` method accepts a couple of arguments:
 
-**`partition_key`**
-Mapping of the partition key to value. For instance, if the table's partition key is `id`, it is expected this mapping
+**`primary_key`**
+Mapping of the primary key to value. For instance, if the table's primary key is `id`, it is expected this mapping
 would be:
 
 ```python
@@ -103,8 +103,8 @@ By default, if the condition expression does not pass, it will return an error t
 
 The `delete()` method accepts a couple of arguments:
 
-**`partition_key`**
-Mapping of the partition key to value. For instance, if the table's partition key is `id`, it is expected this mapping
+**`primary`**
+Mapping of the primary key to value. For instance, if the table's primary key is `id`, it is expected this mapping
 would be:
 
 ```python

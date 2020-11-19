@@ -5,23 +5,35 @@ theme:
   name: material
   icon:
     repo: fontawesome/brands/github
+  features:
+    - navigation.tabs
 
 google_analytics:
   - UA-69269008-3
   - auto
 
 nav:
-  - index.md
-  - setup.md
-  - endpoint-structure.md
-  - access-control.md
-  - filtering.md
-  - validation.md
-  - errors-and-metrics.md
-  - example.md
+  - Home:
+    - index.md
+    - providers.md
+  - Getting Started:
+    - getting-started/installation.md
+    - getting-started/configuration.md
+  - Reference:
+    - reference/endpoint-structure.md
+    - reference/access-control.md
+    - reference/authentication.md
+    - reference/filtering.md
+    - reference/validation.md
+    - reference/errors-and-metrics.md
+  - Example:
+    - example.md
 
 plugins:
   - search
 
 markdown_extensions:
   - codehilite:
+  - admonition
+  - pymdownx.tabbed
+  - pymdownx.superfences
