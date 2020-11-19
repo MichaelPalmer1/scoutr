@@ -7,7 +7,7 @@ class UserData(Model):
     username: str
     name: str
     email: str
-    groups: List[str]
+    entitlements: List[str]
 
 
 class RequestUser(Model):

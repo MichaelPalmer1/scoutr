@@ -98,8 +98,8 @@ class BaseAPI:
 
         # Try to find supplied entitlements in the auth table
         entitlement_ids: List[str] = []
-        if user_data and user_data.groups:
-            entitlements = self.get_entitlements(user_data.groups)
+        if user_data and user_data.entitlements:
+            entitlements = self.get_entitlements(user_data.entitlements)
             for entitlement in entitlements:
                 # Store this as a real entitlement
                 entitlement_ids.append(entitlement.id)
@@ -148,8 +148,8 @@ class BaseAPI:
                 user.name = user_data.name
             if user_data.email:
                 user.email = user_data.email
-            if user_data.groups:
-                user.groups = user_data.groups
+            if user_data.entitlements:
+                user.groups = user_data.entitlements
 
         # Update user object with all applied entitlements
         if entitlement_ids:

@@ -63,6 +63,6 @@ def init_flask_user(api: BaseAPI, request: APIRequest) -> RequestUser:
                 'username': user.data.username,
                 'name': user.data.name,
                 'email': user.data.email,
-                'groups': user.data.groups
+                'groups': user.data.entitlements
             })
     return user
