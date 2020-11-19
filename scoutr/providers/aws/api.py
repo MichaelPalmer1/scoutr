@@ -47,33 +47,8 @@ class DynamoAPI(BaseAPI):
         return User.load(result['Item'])
 
     def get_entitlements(self, entitlement_ids: List[str]) -> List[User]:
-        start_index = 0
-        conditions = None
-
-        # IN expressions are limited to 100 items each
-        for end_index in range(0, len(entitlement_ids), 100):
-            # Create a slice of 100 items
-            items = entitlement_ids[start_index:end_index]
-
-            # Skip if no items are in this slice
-            if not items:
-                continue
-
-            # Create IN expression
-            expr = Attr('id').is_in(items)
-
-            # Combine with conditions using OR
-            if conditions:
-                conditions |= expr
-            else:
-                conditions = expr
-
-            # Set new start index
-            start_index = end_index
-
-        # Add any extra items at the end
-        if len(entitlement_ids[end_index:]) > 0:
-            conditions |= Attr('id').is_in(entitlement_ids[end_index:])
+        # Build an IN expression that limits each expression to 100 items
+        conditions = self.filtering.build_in_expr('id', entitlement_ids)
 
         # Scan for the entitlement ids
         results = self._scan(self.auth_table, FilterExpression=conditions)
