@@ -23,7 +23,7 @@ def main(event, context):
         # Perform deletion
         data = api.delete(
             request=build_api_gateway_request(event),
-            partition_key={'id': item_id}
+            primary_key={'id': item_id}
         )
 
     except HttpException as e:

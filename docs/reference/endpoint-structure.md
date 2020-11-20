@@ -5,44 +5,115 @@ The helper methods within Scoutr assume that your API consists of the below endp
 The list all items endpoint will return a list of all items within the backend that the user has permission to see
 and that meet any specified filter criteria.
 
-## List all unique values for a key
-
-The list by unique key endpoint is provided as a means to display all unique values for a single search key. It is
-implemented by specifying a value for the `unique_key` argument of the `list_unique_values()` method. The simplest way
-to implement this without duplicating code is to use a `UniqueKey` environment variable that defaults to a value of
-`None` when the environment variable is not specified. Then, just configure your "list by unique key" Lambda with that
-environment variable.
-
 ### Serverless Example
 ```yaml
-# Unique listing of all values of the `status` key that the user is permitted to see
-list-statuses:
-  handler: endpoints.list.main
+list:
+  handler: endpoints.list.lambda_handler
   events:
     - http:
-        path: statuses
+        path: items
         method: get
         private: true
-  environment:
-    UniqueKey: status
 ```
 
 ### Implementation Example
+
 ```python
+import json
+import os
+
+from scoutr.exceptions import HttpException
+from scoutr.helpers.api_gateway import build_api_gateway_request, handle_http_exception
+from scoutr.models.config import Config
+from scoutr.providers.aws import DynamoAPI
+
+try:
+    import sentry_sdk
+except ImportError:
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
+
 def lambda_handler(event, context):
-    path_params = event.get('pathParameters', {}) or {}
-    query_params = event.get('multiValueQueryStringParameters', {}) or {}
-    api = DynamoAPI(
-        table_name=os.getenv('TableName'),
-        auth_table_name=os.getenv('AuthTable'),
-        group_table_name=os.getenv('GroupTable')
+    config = Config(
+        data_table=os.getenv('TableName'),
+        auth_table=os.getenv('AuthTable'),
+        group_table=os.getenv('GroupTable'),
+        audit_table=os.getenv('AuditTable'),
+        primary_key='id'
     )
-    data = api.list(
-        request=build_api_gateway_request(event),
-        unique_key=os.getenv('UniqueKey'),
-        path_params=path_params,
-        query_params=query_params
+
+    try:
+        api = DynamoAPI(config)
+        data = api.list(
+            request=build_api_gateway_request(event)
+        )
+    except HttpException as e:
+        if e.status == 500:
+            sentry_sdk.capture_exception(e)
+        return handle_http_exception(e)
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps(data)
+    }
+```
+
+## List all unique values for a key
+
+The list by unique key endpoint is provided as a means to display all unique values for a single search key. It is
+implemented by specifying a value for the `key` argument of the `list_unique_values()` method.
+
+### Implementation Example
+
+```python
+import json
+import os
+
+from scoutr.exceptions import HttpException
+from scoutr.helpers.api_gateway import build_api_gateway_request, handle_http_exception
+from scoutr.models.config import Config
+from scoutr.providers.aws import DynamoAPI
+
+try:
+    import sentry_sdk
+except ImportError:
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
+
+def lambda_handler(event, context):
+    config = Config(
+        data_table=os.getenv('TableName'),
+        auth_table=os.getenv('AuthTable'),
+        group_table=os.getenv('GroupTable'),
+        audit_table=os.getenv('AuditTable'),
+        primary_key='id'
     )
+
+    try:
+        api = DynamoAPI(config)
+        data = api.list_unique_values(
+            request=build_api_gateway_request(event),
+            key='product'
+        )
+    except HttpException as e:
+        if e.status == 500:
+            sentry_sdk.capture_exception(e)
+        return handle_http_exception(e)
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps(data)
+    }
 ```
 
 ## Search multiple values for a single search key
@@ -54,21 +125,188 @@ Lookup information about multiple items (POST `/search/{search_key}`)
 ]
 ```
 
-## Get single item by key
+### Implementation Example
 
-Retrieve a single record from the backend. The `get_item()` method accepts two arguments:
-- `key` - the key to search by
-- `value` - the value to search by
+```python
+import json
+import os
+
+from scoutr.exceptions import HttpException
+from scoutr.helpers.api_gateway import build_api_gateway_request, handle_http_exception
+from scoutr.models.config import Config
+from scoutr.providers.aws import DynamoAPI
+
+try:
+    import sentry_sdk
+except ImportError:
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
+
+def lambda_handler(event, context):
+    config = Config(
+        data_table=os.getenv('TableName'),
+        auth_table=os.getenv('AuthTable'),
+        group_table=os.getenv('GroupTable'),
+        audit_table=os.getenv('AuditTable'),
+        primary_key='id'
+    )
+
+    # Get path parameters
+    path_params = event['pathParameters']
+    query = json.loads(event['body'])
+    search_key = path_params['search_key']
+
+    try:
+        api = DynamoAPI(config)
+        data = api.search(
+            request=build_api_gateway_request(event),
+            key=search_key,
+            values=query
+        )
+    except HttpException as e:
+        if e.status == 500:
+            sentry_sdk.capture_exception(e)
+        return handle_http_exception(e)
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps(data)
+    }
+```
+
+## Get single item by key
 
 If this returns more than one record, it will throw a `BadRequestException`. If no records are
 returned, a `NotFoundException` will be thrown.
 
+### Implementation Example
+
+```python
+import json
+import os
+
+from scoutr.exceptions import HttpException
+from scoutr.helpers.api_gateway import build_api_gateway_request, handle_http_exception
+from scoutr.models.config import Config
+from scoutr.providers.aws import DynamoAPI
+
+try:
+    import sentry_sdk
+except ImportError:
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
+
+def lambda_handler(event, context):
+    config = Config(
+        data_table=os.getenv('TableName'),
+        auth_table=os.getenv('AuthTable'),
+        group_table=os.getenv('GroupTable'),
+        audit_table=os.getenv('AuditTable'),
+        primary_key='id'
+    )
+
+    # Get item id
+    item_id = event['pathParameters']['id']
+
+    try:
+        api = DynamoAPI(config)
+        data = api.get(
+            request=build_api_gateway_request(event),
+            key='id',
+            value=item_id
+        )
+    except HttpException as e:
+        if e.status == 500:
+            sentry_sdk.capture_exception(e)
+        return handle_http_exception(e)
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps(data)
+    }
+```
+
 ## Create item
 
-The `create()` method accepts an `item` argument, with `item` being the `dict` of the data to
-be inserted. It also accepts a `field_validation` argument in order to perform validation on
-all the supplied data. Refer to the [data validation](#data-validation) section for more
-information.
+Refer to the [data validation](../validation) section for more information on validation.
+
+### Implementation Example
+
+```python
+import json
+import os
+import re
+
+from scoutr.exceptions import HttpException
+from scoutr.helpers.api_gateway import build_api_gateway_request, handle_http_exception
+from scoutr.models.config import Config
+from scoutr.providers.aws import DynamoAPI
+from scoutr.utils import value_in_set
+
+try:
+    import sentry_sdk
+except ImportError:
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
+
+
+PRODUCTS = {'a', 'b', 'c'}
+
+VALIDATION = {
+    'product': lambda value, item, existing_item: value_in_set(
+        value=value,
+        valid_options=PRODUCTS,
+        option_name='product'
+    ),
+    'date': lambda value, item, existing_item: {
+        'result': re.match('^\d{4}-\d{2}-\d{2}$', value),
+        'message': 'Date must be formatted as YYYY-MM-DD'
+    }
+}
+
+def lambda_handler(event, context):
+    config = Config(
+        data_table=os.getenv('TableName'),
+        auth_table=os.getenv('AuthTable'),
+        group_table=os.getenv('GroupTable'),
+        audit_table=os.getenv('AuditTable'),
+        primary_key='id'
+    )
+
+    item = json.loads(event['body'])
+
+    try:
+        api = DynamoAPI(config)
+        data = api.create(
+            request=build_api_gateway_request(event),
+            data=item,
+            validation=VALIDATION
+        )
+    except HttpException as e:
+        if e.status == 500:
+            sentry_sdk.capture_exception(e)
+        return handle_http_exception(e)
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps(data)
+    }
+```
 
 ## Update single item by key
 
@@ -85,8 +323,8 @@ would be:
 **`data`**
 Dictionary of fields to be updated
 
-**`field_validation`**
-Dictionary of fields to perform validation against. Refer to the [data validation](#data-validation) section for more
+**`validation`**
+Dictionary of fields to perform validation against. Refer to the [data validation](../validation) section for more
 information.
 
 **`condition`**
@@ -99,11 +337,77 @@ condition expression does not pass, a `BadRequestException` will be thrown.
 By default, if the condition expression does not pass, it will return an error to the user stating
 "Conditional check failed". However, if this parameter is supplied, it will be returned to the user instead.
 
+### Implementation Example
+
+```python
+import json
+import os
+import re
+
+from scoutr.exceptions import HttpException
+from scoutr.helpers.api_gateway import build_api_gateway_request, handle_http_exception
+from scoutr.models.config import Config
+from scoutr.providers.aws import DynamoAPI
+from scoutr.utils import value_in_set
+
+try:
+    import sentry_sdk
+except ImportError:
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
+
+
+PRODUCTS = {'a', 'b', 'c'}
+
+VALIDATION = {
+    'product': lambda value, item, existing_item: value_in_set(
+        value=value,
+        valid_options=PRODUCTS,
+        option_name='product'
+    ),
+    'date': lambda value, item, existing_item: {
+        'result': re.match('^\d{4}-\d{2}-\d{2}$', value),
+        'message': 'Date must be formatted as YYYY-MM-DD'
+    }
+}
+
+def lambda_handler(event, context):
+    config = Config(
+        data_table=os.getenv('TableName'),
+        auth_table=os.getenv('AuthTable'),
+        group_table=os.getenv('GroupTable'),
+        audit_table=os.getenv('AuditTable'),
+        primary_key='id'
+    )
+
+    data = json.loads(event['body'])
+
+    try:
+        api = DynamoAPI(config)
+        data = api.update(
+            request=build_api_gateway_request(event),
+            data=data,
+            validation=VALIDATION
+        )
+    except HttpException as e:
+        if e.status == 500:
+            sentry_sdk.capture_exception(e)
+        return handle_http_exception(e)
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps(data)
+    }
+```
+
 ## Delete single item by key
 
-The `delete()` method accepts a couple of arguments:
-
-**`primary`**
+**`primary_key`**
 Mapping of the primary key to value. For instance, if the table's primary key is `id`, it is expected this mapping
 would be:
 
@@ -121,26 +425,218 @@ condition expression does not pass, a `BadRequestException` will be thrown.
 By default, if the condition expression does not pass, it will return an error to the user stating
 "Conditional check failed". However, if this parameter is supplied, it will be returned to the user instead.
 
+### Implementation Example
+
+```python
+import json
+import os
+import re
+
+from scoutr.exceptions import HttpException
+from scoutr.helpers.api_gateway import build_api_gateway_request, handle_http_exception
+from scoutr.models.config import Config
+from scoutr.providers.aws import DynamoAPI
+from scoutr.utils import value_in_set
+
+try:
+    import sentry_sdk
+except ImportError:
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
+
+
+PRODUCTS = {'a', 'b', 'c'}
+
+VALIDATION = {
+    'product': lambda value, item, existing_item: value_in_set(
+        value=value,
+        valid_options=PRODUCTS,
+        option_name='product'
+    ),
+    'date': lambda value, item, existing_item: {
+        'result': re.match('^\d{4}-\d{2}-\d{2}$', value),
+        'message': 'Date must be formatted as YYYY-MM-DD'
+    }
+}
+
+def lambda_handler(event, context):
+    config = Config(
+        data_table=os.getenv('TableName'),
+        auth_table=os.getenv('AuthTable'),
+        group_table=os.getenv('GroupTable'),
+        audit_table=os.getenv('AuditTable'),
+        primary_key='id'
+    )
+
+    # Get item id
+    item_id = event['pathParameters']['id']
+
+    try:
+        api = DynamoAPI(config)
+        data = api.delete(
+            request=build_api_gateway_request(event),
+            primary_key={'id': item_id}
+        )
+    except HttpException as e:
+        if e.status == 500:
+            sentry_sdk.capture_exception(e)
+        return handle_http_exception(e)
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps(data)
+    }
+```
+
 ## List all audit logs
 
-The `list_audit_logs()` method accepts:
+This endpoint enables users to view and filter all of the audit logs. Note that field filter permissions do not apply to
+audit logs, but the `permitted_endpoint` permissions still do.
 
-**`search_params`**
-Any search parameters to apply
+### Implementation Example
 
-**`query_params`**
-Query parameters from API Gateway
+```python
+import json
+import os
+
+from scoutr.exceptions import HttpException
+from scoutr.helpers.api_gateway import build_api_gateway_request, handle_http_exception
+from scoutr.models.config import Config
+from scoutr.providers.aws import DynamoAPI
+
+try:
+    import sentry_sdk
+except ImportError:
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
+
+def lambda_handler(event, context):
+    config = Config(
+        data_table=os.getenv('TableName'),
+        auth_table=os.getenv('AuthTable'),
+        group_table=os.getenv('GroupTable'),
+        audit_table=os.getenv('AuditTable'),
+        primary_key='id'
+    )
+
+    # Build request
+    request = build_api_gateway_request(event)
+
+    # Validate item id
+    item = request.path_params.get('item')
+    if item:
+        param_overrides = {'resource.id': item}
+    else:
+        param_overrides = {}
+
+    try:
+        api = DynamoAPI(config)
+        data = api.list_audit_logs(
+            request=request,
+            param_overrides=param_overrides
+        )
+    except HttpException as e:
+        if e.status == 500:
+            sentry_sdk.capture_exception(e)
+        return handle_http_exception(e)
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps(data)
+    }
+```
 
 ## View item history
 
-**`key`**
-Resource key to search on
+The history endpoint utilizes the audit logs to reconstruct snapshots of a record over time. A sample output is shown
+below:
 
-**`value`**
-Resource value to search on
+```json
+[
+    {
+        "data": {
+            "product": "a",
+            "active_date": "2019-12-17",
+            "status": "Suspended"
+        },
+        "time": "2020-01-01T16:10:32.399907"
+    },
+    {
+        "data": {
+            "product": "a",
+            "active_date": "2019-12-17",
+            "status": "Active"
+        },
+        "time": "2019-12-01T19:04:42.054592"
+    },
+    {
+        "data": {
+            "product": "a",
+            "status": "Created"
+        },
+        "time": "2019-01-01T00:00:00.000769"
+    }
+]
+```
 
-**`query_params`**
-Query parameters from API Gateway
+### Implementation Example
 
-**`actions`**
-Actions to filter on
+```python
+import json
+import os
+
+from scoutr.exceptions import HttpException
+from scoutr.helpers.api_gateway import build_api_gateway_request, handle_http_exception
+from scoutr.models.config import Config
+from scoutr.providers.aws import DynamoAPI
+
+try:
+    import sentry_sdk
+except ImportError:
+    from scoutr.utils import mock_sentry
+    sentry_sdk = mock_sentry
+
+def lambda_handler(event, context):
+    config = Config(
+        data_table=os.getenv('TableName'),
+        auth_table=os.getenv('AuthTable'),
+        group_table=os.getenv('GroupTable'),
+        audit_table=os.getenv('AuditTable'),
+        primary_key='id'
+    )
+
+    # Get parameters
+    item = event['pathParameters']['id']
+
+    try:
+        api = DynamoAPI(config)
+        data = api.history(
+            request=build_api_gateway_request(event),
+            key='id',
+            value=item
+        )
+    except HttpException as e:
+        if e.status == 500:
+            sentry_sdk.capture_exception(e)
+        return handle_http_exception(e)
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps(data)
+    }
+```

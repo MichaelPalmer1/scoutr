@@ -1,9 +1,23 @@
-For convenience, support for data validation on all create and update calls is supported. In order to implement the
-validation, a dictionary should be passed to the `field_validation` argument of the `create()` or `update()` methods
-of `DynamoAPI`. The syntax of this dictionary is outlined below.
+Data validation on all create and update calls is supported. In order to implement the validation, a dictionary
+should be passed to the `validation` argument of the `create()` or `update()` methods of the provider.
 
-On `create()` calls, all items specified in the `field_validation` dictionary are assumed to be required fields. If a
-field is missing from the user input, an error will be thrown saying that the field is required.
+## Required Fields
+
+To require that specific fields exist in a CREATE request, specify those fields in the `required_fields` argument:
+
+=== "Python"
+
+    ```python
+    api.create(request, data, required_fields=("product", "region"))
+    ```
+
+=== "Go"
+
+    ```go
+    requiredFields := []string{"product", "region"}
+
+    api.Create(request, body, validation, requiredFields)
+    ```
 
 ## Syntax
 
@@ -40,7 +54,7 @@ field is missing from the user input, an error will be thrown saying that the fi
     ```
 
 The key of each item in the dictionary should match a field name that you want to perform validation against. The
-corresponding value for the key should be a callable that either returns a bool or a dict formatted as:
+corresponding value for the key should be a callable that either returns a boolean or an object formatted as:
 
 === "Python"
 
@@ -52,6 +66,13 @@ corresponding value for the key should be a callable that either returns a bool 
     ```
 
 === "Go"
+    The function should have an output of
+
+    ```go
+    (bool, string, error)
+    ```
+
+    For instance:
 
     ```go
     return true|false, "custom error message to return to the user", err|nil
@@ -59,9 +80,10 @@ corresponding value for the key should be a callable that either returns a bool 
 
 The callable that you provide can either be a function or a lambda. The method signature of both options **must accept**
 three arguments:
-- `value` - Contains the input value for this field
-- `item` - Contains the entire data object that was passed from the user
-- `existing_item` - Contains the existing data object in the data table. This will only have a value on update calls.
+
+- `value` (Type: `string`) - Contains the input value for this field
+- `item` (Type: `dict` / `map[string]interface{}`) - Contains the entire data object that was passed from the user
+- `existing_item` (Type: `dict` / `map[string]interface{}`) - Contains the existing data object in the data table. This will only have a value on update calls.
     For create calls, this will be `None`.
 
 ## Example
@@ -69,6 +91,9 @@ three arguments:
 === "Python"
 
     ```python
+    import re
+    from scoutr.utils import value_in_set
+
     def validate_user(value, item, existing_item=None):
         if isinstance(existing_item, dict):
             item_type = existing_item.get('type')
@@ -112,6 +137,13 @@ three arguments:
 === "Go"
 
     ```go
+    import (
+        "fmt"
+        "regexp"
+
+        "github.com/MichaelPalmer1/scoutr-go/utils"
+    )
+
     func validateUser(value string, item map[string]string, existingItem map[string]string) (bool, string, error) {
         var itemType string
         if existingItem != nil {

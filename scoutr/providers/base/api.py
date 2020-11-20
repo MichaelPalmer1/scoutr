@@ -565,5 +565,5 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def delete(self, request: Request, partition_key: dict) -> dict:
+    def delete(self, request: Request, primary_key: dict) -> dict:
         raise NotImplementedError
