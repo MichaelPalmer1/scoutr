@@ -106,7 +106,7 @@ Name of the database in MongoDB to use
         OIDCUsernameHeader: "Oidc-Claim-Sub",
         OIDCEmailHeader: "Oidc-Claim-Mail",
         OIDCGroupsHeader: "Oidc-Claim-Groups",
-        OIDCNameHeader: []string{"Oidc-Claim-Firstname", "Oidc-Claim-Lastname"},
+        OIDCNameHeader: "Oidc-Claim-Name",
     }
 
     dynamoApi := DynamoAPI(config)
