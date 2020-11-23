@@ -25,7 +25,7 @@ nav:
     - reference/authentication.md
     - reference/filtering.md
     - reference/validation.md
-    - reference/errors-and-metrics.md
+    - reference/error-tracking.md
   - Example:
     - example.md
 

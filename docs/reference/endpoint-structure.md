@@ -118,12 +118,26 @@ def lambda_handler(event, context):
 
 ## Search multiple values for a single search key
 
-Lookup information about multiple items (POST `/search/{search_key}`)
+The search endpoint enables users to lookup information about multiple items by utilizing a dynamic path variable
+(POST `/search/{search_key}`).
+
+For example, if you wanted to search for records that had specific `product` key, you could submit the below request:
+
+```
+POST /search/product
+```
+
+With the body:
+
 ```json
 [
-    "123456789012"
+    "Standard",
+    "Limited",
+    "Deluxe"
 ]
 ```
+
+Would return the contents of records where `product` is one of "Standard", "Limited", or "Deluxe".
 
 ### Implementation Example
 
