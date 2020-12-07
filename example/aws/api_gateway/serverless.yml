@@ -1,0 +1,222 @@
+service: scoutr-python
+
+provider:
+  name: aws
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  runtime: python3.8
+  memorySize: 1024
+  timeout: 30
+  logRetentionInDays: 30
+  versionFunctions: true
+
+  usagePlan:
+    quota:
+      limit: 1000
+      offset: 1
+      period: WEEK
+    throttle:
+      burstLimit: 100
+      rateLimit: 50
+
+  tags:
+    app: ${self:service}
+    env: ${self:provider.stage}
+
+  stackTags:
+    app: ${self:service}
+    env: ${self:provider.stage}
+
+  environment:
+    Stage: ${self:provider.stage}
+    AuthTable: !Ref AuthTable
+    GroupTable: !Ref GroupTable
+    TableName: !Ref DataTable
+    AuditTable: !Ref AuditTable
+
+  iamRoleStatements:
+    - Sid: WriteActions
+      Effect: Allow
+      Action:
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: !GetAtt DataTable.Arn
+    - Sid: ReadActions
+      Effect: Allow
+      Action:
+        - dynamodb:DescribeTable
+        - dynamodb:Scan
+        - dynamodb:GetItem
+      Resource:
+        - !GetAtt DataTable.Arn
+        - !GetAtt AuthTable.Arn
+        - !GetAtt GroupTable.Arn
+
+plugins:
+  - serverless-python-requirements
+  - serverless-pseudo-parameters
+
+package:
+  exclude:
+    - .gitignore
+    - venv/**
+    - node_modules/**
+    - .vscode/**
+    - .git/**
+    - docs/**
+    - docs.zip
+
+functions:
+  # Unique listing of all values of the `type` key that the user is permitted to see
+  list-types:
+    handler: example.endpoints.list.main
+    events:
+      - http:
+          path: types
+          method: get
+          private: true
+    environment:
+      UniqueKey: type
+
+  # Unique listing of all values of the `status` key that the user is permitted to see
+  list-statuses:
+    handler: example.endpoints.list.main
+    events:
+      - http:
+          path: statuses
+          method: get
+          private: true
+    environment:
+      UniqueKey: status
+
+  # List all items the user is permitted to see
+  list:
+    handler: example.endpoints.list.main
+    events:
+      - http:
+          path: items
+          method: get
+          private: true
+      - http:
+          path: items/{search_key}/{search_value}
+          method: get
+          private: true
+
+  # List audit logs
+  audit:
+    handler: example.endpoints.audit.main
+    events:
+      - http:
+          path: audit
+          method: get
+          private: true
+      - http:
+          path: audit/{item}
+          method: get
+          private: true
+
+  # List history for an item
+  history:
+    handler: example.endpoints.history.main
+    events:
+      - http:
+          path: history/{item}
+          method: get
+          private: true
+
+  # Search all items by a single search key
+  search:
+    handler: example.endpoints.search.main
+    events:
+      - http:
+          path: search/{search_key}
+          method: post
+          private: true
+
+  # Get a specific item
+  get:
+    handler: example.endpoints.get.main
+    events:
+      - http:
+          path: item/{id}
+          method: get
+          private: true
+
+  create:
+    handler: example.endpoints.create.main
+    events:
+      - http:
+          path: item
+          method: post
+          private: true
+
+  update:
+    handler: example.endpoints.update.main
+    events:
+      - http:
+          path: item/{id}
+          method: put
+          private: true
+
+  delete:
+    handler: example.endpoints.delete.main
+    events:
+      - http:
+          path: item/{id}
+          method: delete
+          private: true
+
+resources:
+  Resources:
+    DataTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+      DeletionPolicy: Retain
+
+    AuthTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-auth-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+    GroupTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-groups-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: group_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: group_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+    AuditTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-audit-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: time
+            AttributeType: S
+        KeySchema:
+          - AttributeName: time
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        TimeToLiveSpecification:
+          Enabled: true
+          AttributeName: expire_time
