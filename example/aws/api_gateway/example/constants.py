@@ -20,7 +20,7 @@ CREATE_FIELDS = {
         'message': 'Invalid id'
     },
     'description': lambda value, item, existing_item: isinstance(value, str),
-    'status': lambda value, item, existing_item: DynamoAPI.value_in_list(
+    'status': lambda value, item, existing_item: DynamoAPI.value_in_set(
         value=value,
         valid_options=VALID_STATUSES,
         option_name='status'

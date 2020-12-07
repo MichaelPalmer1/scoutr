@@ -1,31 +1,48 @@
-from typing import get_type_hints, Dict, Any
+from typing import get_type_hints, Dict, Any, _GenericAlias
 
 
 class Model:
     def __init__(self, **kwargs):
-        for attr, cls in get_type_hints(self).items():
+        for attr, cls in get_type_hints(self.__class__).items():
+            # Convert types
+            try:
+                if isinstance(cls, _GenericAlias):
+                    if cls._name == 'List':
+                        cls = list
+                    elif cls._name == 'Dict':
+                        cls = dict
+            except TypeError:
+                pass
+
+            # Check if attribute is not in kwargs
             if attr not in kwargs:
                 # If a default value is set, use that
-                if getattr(self, attr, None) is not None:
-                    continue
+                args = []
+                default_val = getattr(self, attr, None)
+                if default_val is not None:
+                    args.append(default_val)
 
+                # Try to initialize the value
                 try:
-                    value = cls()
+                    value = cls(*args)
                 except TypeError:
                     value = None
-                setattr(self, attr, value)
             else:
+                # Set value from kwargs
                 value = kwargs[attr]
 
+                # Detect if this is a Model class
                 try:
                     is_model_class = issubclass(cls, Model) and isinstance(value, dict)
                 except TypeError:
                     is_model_class = False
 
+                # Run Modal class constructor
                 if is_model_class:
                     value = cls(**value)
 
-                setattr(self, attr, value)
+            # Set the attribute
+            setattr(self, attr, value)
 
     @classmethod
     def attributes(cls) -> tuple:
@@ -50,5 +67,28 @@ class Model:
         return output
 
     @classmethod
-    def load(cls, data: Dict[str, Any]):
-        return cls(**data)
+    def load(cls, data: Dict[str, Any], skip_validation=False):
+        model = cls(**data)
+        if not skip_validation:
+            model.validate()
+
+        return model
+
+    def validate(self):
+        valid_attributes = set(self.attributes())
+
+        # Compile list of required fields (fields that default to None)
+        required_fields = set()
+        for attr in valid_attributes:
+            if getattr(self.__class__, attr, None) is None:
+                required_fields.add(attr)
+
+        # Compile list of fields that have values
+        missing_fields = set()
+        for attr in valid_attributes:
+            if getattr(self, attr, None) is None:
+                missing_fields.add(attr)
+
+        # Make sure required fields have values
+        if missing_fields:
+            raise Exception(f'Missing required fields on {self.__class__.__name__}: {missing_fields}')

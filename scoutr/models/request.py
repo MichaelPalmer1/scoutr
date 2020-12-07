@@ -7,7 +7,7 @@ class UserData(Model):
     username: str
     name: str
     email: str
-    groups: List[str]
+    entitlements: List[str]
 
 
 class RequestUser(Model):
@@ -19,8 +19,8 @@ class Request(Model):
     user: RequestUser
     method: str
     path: str
-    body: Any
     source_ip: str
     user_agent: str
+    body: Any
     path_params: dict
     query_params: dict

@@ -45,6 +45,23 @@ class MongoAPI(BaseAPI):
         # Create user object
         return User.load(result)
 
+    def get_entitlements(self, entitlement_ids: List[str]) -> List[User]:
+        entitlements = []
+        conditions = self.filtering.is_in('id', entitlement_ids)
+
+        for record in self.data_table.find(conditions):
+            # Convert ObjectId to string if necessary
+            if isinstance(record['_id'], ObjectId):
+                record['_id'] = str(record['_id'])
+
+            # Overwrite the id
+            record['id'] = record['_id']
+
+            # Add the record
+            entitlements.append(User.load(record))
+
+        return entitlements
+
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table
         result = self.group_table.find_one(group_id)
@@ -133,11 +150,12 @@ class MongoAPI(BaseAPI):
         sentry_sdk.add_breadcrumb(category='data', message='Created item in Firestore', level='info')
 
         # Create audit log
-        self.audit_log(action='CREATE', resource=resource, request=request, user=user)
+        self.audit_log(action=self.AUDIT_ACTION_CREATE, resource=resource, request=request, user=user)
 
         return resource
 
-    def update(self, request: Request, primary_key: dict, data: dict, validation: dict, audit_action='UPDATE') -> dict:
+    def update(self, request: Request, primary_key: dict, data: dict, validation: dict,
+               audit_action=BaseAPI.AUDIT_ACTION_UPDATE) -> dict:
         """
         Update an item
 
@@ -157,18 +175,20 @@ class MongoAPI(BaseAPI):
 
         # Validate audit action
         audit_action = audit_action.upper()
-        if audit_action in ('CREATE', 'DELETE', 'GET', 'LIST', 'SEARCH'):
+        if audit_action in (self.AUDIT_ACTION_CREATE, self.AUDIT_ACTION_DELETE,
+                            self.AUDIT_ACTION_GET, self.AUDIT_ACTION_LIST, self.AUDIT_ACTION_SEARCH):
             raise Exception('%s is a reserved built-in audit action' % audit_action)
 
         # Deny updates to primary key
         if self.config.primary_key in data:
             raise BadRequestException('Primary key %s cannot be updated' % self.config.primary_key)
 
-        # Validate update
-        self.validate_update(user, data)
-
         # Add in the user's permissions
-        conditions = self.filtering.filter(user, {'_id': primary_key[self.config.primary_key]})
+        conditions = self.filtering.filter(
+            user,
+            {'_id': primary_key[self.config.primary_key]},
+            action=self.filtering.FILTER_ACTION_READ
+        )
 
         # Get the existing item
         existing_item = self.data_table.find_one(conditions)
@@ -185,6 +205,9 @@ class MongoAPI(BaseAPI):
 
         # Found the item
         existing_item = existing_item[0]
+
+        # Validate update
+        self.validate_update(user, data, existing_item)
 
         # Perform field validation
         if validation:
@@ -274,7 +297,7 @@ class MongoAPI(BaseAPI):
             data['_id'] = str(data['_id'])
 
         # Item was found, return the single item
-        self.audit_log(action='GET', request=request, user=user, resource={key: value})
+        self.audit_log(action=self.AUDIT_ACTION_GET, request=request, user=user, resource={key: value})
         return data
 
     def list(self, request: Request) -> List[dict]:
@@ -306,7 +329,7 @@ class MongoAPI(BaseAPI):
             data.append(record)
 
         # Add audit log
-        self.audit_log('LIST', request, user)
+        self.audit_log(self.AUDIT_ACTION_LIST, request, user)
 
         return data
 
@@ -350,7 +373,7 @@ class MongoAPI(BaseAPI):
         output = unique_func(data, key)
 
         # Create audit log
-        self.audit_log('LIST', request, user)
+        self.audit_log(self.AUDIT_ACTION_LIST, request, user)
 
         return output
 
@@ -450,7 +473,7 @@ class MongoAPI(BaseAPI):
                 output.append(record)
 
         # Create audit log
-        self.audit_log(action='SEARCH', request=request, user=user)
+        self.audit_log(action=self.AUDIT_ACTION_SEARCH, request=request, user=user)
 
         # Return the results
         return output
@@ -469,7 +492,7 @@ class MongoAPI(BaseAPI):
 
         # Add in the user's permissions
         conditions = self.filtering.And(
-            self.filtering.filter(user),
+            self.filtering.filter(user, action=self.filtering.FILTER_ACTION_DELETE),
             self.filtering.equals('_id', primary_key[self.config.primary_key])
         )
 
@@ -497,7 +520,7 @@ class MongoAPI(BaseAPI):
 
         # Create audit log
         self.audit_log(
-            action='DELETE',
+            action=self.AUDIT_ACTION_DELETE,
             request=request,
             user=user,
             resource=primary_key,

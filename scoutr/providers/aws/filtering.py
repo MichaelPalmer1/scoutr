@@ -70,16 +70,56 @@ class AWSFiltering(Filtering):
             raise Exception('Between operation requires two values')
         return Attr(attr).between(*values)
 
+    def build_in_expr(self, attr, values, negate=False):
+        start_index = 0
+        end_index = 0
+        conditions = None
+
+        # IN expressions are limited to 100 items each
+        for end_index in range(0, len(values), 100):
+            # Create a slice of 100 items
+            items = values[start_index:end_index]
+
+            # Skip if no items are in this slice
+            if not items:
+                continue
+
+            # Create IN expression
+            expr = Attr(attr).is_in(items)
+            if negate:
+                expr = Not(expr)
+
+            # Combine with conditions using OR
+            if negate:
+                conditions = self.And(conditions, expr)
+            else:
+                conditions = self.Or(conditions, expr)
+
+            # Set new start index
+            start_index = end_index
+
+        # Add any extra items at the end
+        if len(values[end_index:]) > 0:
+            expr = Attr(attr).is_in(values[end_index:])
+            if negate:
+                conditions = self.And(conditions, Not(expr))
+            else:
+                conditions = self.Or(conditions, expr)
+
+        return conditions
+
     def is_in(self, attr: str, value):
         if isinstance(value, list):
             values = value
         else:
             values = json.loads(value)
-        return Attr(attr).is_in(values)
+
+        return self.build_in_expr(attr, values)
 
     def not_in(self, attr: str, value):
         if isinstance(value, list):
             values = value
         else:
             values = json.loads(value)
-        return Not(Attr(attr).is_in(values))
+
+        return self.build_in_expr(attr, values, negate=True)

@@ -1,6 +1,9 @@
-import os
+# import os
 
 # import sentry_sdk
+import random
+import time
+
 from flask import request
 # from sentry_sdk.integrations.flask import FlaskIntegration
 from scoutr.models.config import Config
@@ -35,13 +38,30 @@ app = init_flask(
 )
 
 
+def wait_random_time(value, item, existing_item=None):
+    random.seed(time.time())
+    delay = random.randint(1, 5)
+    print('waiting for %s seconds' % delay)
+    time.sleep(delay)
+    print('done waiting')
+
+    if random.choice([True, False]):
+        raise Exception('failure triggered')
+
+
 @app.route("/item/", methods=['POST'])
 @flaskapi_exception_wrapper
 def create_item():
     """Create an item"""
     return api.create(
         request=build_oidc_request(api, request),
-        data=request.data
+        data=request.data,
+        validation={
+            'val1': wait_random_time,
+            'val2': wait_random_time,
+            'val3': wait_random_time,
+            'val4': wait_random_time
+        }
     )
 
 

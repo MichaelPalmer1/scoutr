@@ -17,6 +17,7 @@ try:
     import sentry_sdk
 except ImportError:
     from scoutr.utils import mock_sentry
+
     sentry_sdk = mock_sentry
 
 logger = logging.getLogger(__name__)
@@ -45,9 +46,24 @@ class DynamoAPI(BaseAPI):
         # Create user object
         return User.load(result['Item'])
 
+    def get_entitlements(self, entitlement_ids: List[str]) -> List[User]:
+        # Build an IN expression that limits each expression to 100 items
+        conditions = self.filtering.build_in_expr('id', entitlement_ids)
+
+        # Scan for the entitlement ids
+        results = self._scan(self.auth_table, FilterExpression=conditions)
+
+        # Convert to User instances
+        entitlements: List[User] = []
+        for item in results:
+            auth = User.load(item, skip_validation=True)
+            entitlements.append(auth)
+
+        return entitlements
+
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table
-        result = self.group_table.get_item(Key={'group_id': group_id})
+        result = self.group_table.get_item(Key={'id': group_id})
 
         if not result.get('Item'):
             return None
@@ -75,7 +91,7 @@ class DynamoAPI(BaseAPI):
         return items
 
     def create(self, request: Request, data: dict, validation: dict = None,
-               required_fields: Union[List, Tuple] = ()) -> dict:
+               required_fields: Union[List, Tuple] = (), condition=None, condition_failure_message='') -> dict:
         """
         Create an item
 
@@ -84,6 +100,8 @@ class DynamoAPI(BaseAPI):
         :param dict validation: Optional dictionary containing mappings of field name to callable. See the docstring
         in the _validate_fields method for more information.
         :param list required_fields: Optional list of required fields
+        :param condition: Optional condition expression to apply to PutItem call
+        :param str condition_failure_message: Optional condition failure message to use instead of the default
         :return: Created item
         :rtype: dict
         """
@@ -91,12 +109,19 @@ class DynamoAPI(BaseAPI):
 
         # Build condition to ensure the unique key does not exist
         resource: Dict[str, str] = {}
-        conditions = None
+        conditions = None  # self.filtering.filter(user, action=self.filtering.FILTER_ACTION_CREATE)
         for schema in self.data_table.key_schema:
             resource.update({schema['AttributeName']: data.get(schema['AttributeName'])})
             conditions = self.filtering.And(
                 conditions,
                 Attr(schema['AttributeName']).not_exists()
+            )
+
+        # Apply user's condition if it exists
+        if condition:
+            conditions = self.filtering.And(
+                conditions,
+                condition
             )
 
         try:
@@ -111,7 +136,10 @@ class DynamoAPI(BaseAPI):
                     'user': self.user_identifier(user),
                     'item': data
                 })
-                raise BadRequestException('Item already exists or you do not have permission to create it.')
+                if condition_failure_message:
+                    raise BadRequestException(condition_failure_message)
+                else:
+                    raise BadRequestException('Item already exists or you do not have permission to create it.')
             elif e.response['Error']['Code'] == 'ValidationException':
                 logger.error('[%(user)s] Validation error - %(error)s:\n%(item)s' % {
                     'user': self.user_identifier(user),
@@ -142,12 +170,12 @@ class DynamoAPI(BaseAPI):
         sentry_sdk.add_breadcrumb(category='data', message='Created item', level='info')
 
         # Create audit log
-        self.audit_log(action='CREATE', resource=resource, request=request, user=user)
+        self.audit_log(action=self.AUDIT_ACTION_CREATE, resource=resource, request=request, user=user)
 
         return resource
 
     def update(self, request: Request, primary_key: dict, data: dict, validation: dict = None, condition=None,
-               condition_failure_message='', audit_action='UPDATE') -> dict:
+               condition_failure_message='', audit_action=BaseAPI.AUDIT_ACTION_UPDATE) -> dict:
         """
         Update an item
 
@@ -171,37 +199,25 @@ class DynamoAPI(BaseAPI):
 
         # Validate audit action
         audit_action = audit_action.upper()
-        if audit_action in ('CREATE', 'DELETE', 'GET', 'LIST', 'SEARCH'):
+        if audit_action in (self.AUDIT_ACTION_CREATE, self.AUDIT_ACTION_DELETE,
+                            self.AUDIT_ACTION_GET, self.AUDIT_ACTION_LIST, self.AUDIT_ACTION_SEARCH):
             raise Exception('%s is a reserved built-in audit action' % audit_action)
 
-        # Get the existing item / make sure it actually exists and user has permission to access it
-        base_conditions = None
-        for key, value in primary_key.items():
-            # Check if the partition key is specified in the data input
-            if key in data:
-                raise BadRequestException('Partition key cannot be updated')
-
-            cond = Attr(key).eq(value)
-            if base_conditions:
-                base_conditions &= cond
-            else:
-                base_conditions = cond
-
-        # Check user update permissions
-        self.validate_update(user, data)
-
         # Add in the user's permissions
-        user_conditions = self.filtering.filter(user)
-        if user_conditions:
-            if base_conditions:
-                base_conditions &= user_conditions
-            else:
-                base_conditions = user_conditions
+        conditions = self.filtering.filter(user, action=self.filtering.FILTER_ACTION_UPDATE)
+
+        # Get the existing item / make sure it actually exists and user has permission to access it
+        for key, value in primary_key.items():
+            # Check if the primary key is specified in the data input
+            if key in data:
+                raise BadRequestException('Primary key cannot be updated')
+
+            conditions = self.filtering.And(conditions, Attr(key).eq(value))
 
         # Get the existing item
-        existing_item = self._scan(self.data_table, FilterExpression=base_conditions)
+        existing_item = self._scan(self.data_table, FilterExpression=conditions)
         if len(existing_item) == 0:
-            logger.info('[%(user)s] Partition key "%(primary_key)s" does not exist or user does '
+            logger.info('[%(user)s] Primary key "%(primary_key)s" does not exist or user does '
                         'not have permission to access it' % {
                             'user': self.user_identifier(user),
                             'primary_key': primary_key
@@ -213,6 +229,9 @@ class DynamoAPI(BaseAPI):
 
         # Found the item
         existing_item = existing_item[0]
+
+        # Check user update permissions
+        self.validate_update(user, data, existing_item)
 
         # Perform field validation
         if validation:
@@ -327,7 +346,7 @@ class DynamoAPI(BaseAPI):
         output = self.post_process(data, user)[0]
 
         # Item was found, return the single item
-        self.audit_log(action='GET', request=request, user=user, resource={key: value})
+        self.audit_log(action=self.AUDIT_ACTION_GET, request=request, user=user, resource={key: value})
         return output
 
     def list(self, request: Request) -> List[dict]:
@@ -340,15 +359,38 @@ class DynamoAPI(BaseAPI):
         """
         user, params = self._prepare_list(request)
 
+        # Build filters
         args = {}
         conditions = self.filtering.filter(user, params)
         if conditions:
             args.update({'FilterExpression': conditions})
 
-        data = self._scan(self.data_table, **args)
+        try:
+            # Scan the table
+            data = self._scan(self.data_table, **args)
+        except ClientError as e:
+            logger.error(
+                '[%(user)s] Encountered error while attempting to list records: [%(code)s] %(error)s' % {
+                    'user': self.user_identifier(user),
+                    'code': e.response['Error']['Code'],
+                    'error': e.response['Error']['Message']
+                }
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                '[%(user)s] Encountered error while attempting to list records: %(error)s' % {
+                    'user': self.user_identifier(user),
+                    'error': str(e)
+                }
+            )
+            raise
+
+        # Perform post processing
         data = self.post_process(data, user)
 
-        self.audit_log('LIST', request, user)
+        # Add audit log
+        self.audit_log(self.AUDIT_ACTION_LIST, request, user)
 
         return data
 
@@ -390,7 +432,7 @@ class DynamoAPI(BaseAPI):
         output = unique_func(data, key)
 
         # Create audit log
-        self.audit_log('LIST', request, user)
+        self.audit_log(self.AUDIT_ACTION_LIST, request, user)
 
         return output
 
@@ -496,7 +538,7 @@ class DynamoAPI(BaseAPI):
             output.extend(data)
 
         # Create audit log
-        self.audit_log(action='SEARCH', request=request, user=user)
+        self.audit_log(action=self.AUDIT_ACTION_SEARCH, request=request, user=user)
 
         # Return the filtered response
         return self.post_process(output, user)
@@ -521,27 +563,22 @@ class DynamoAPI(BaseAPI):
         if condition:
             default_condition_message = 'Conditional check failed'
         else:
-            default_condition_message = 'Item does not exist'
+            default_condition_message = 'Item does not exist or you do not have permission to delete it'
+
+        # Add in the user's permissions
+        conditions = self.filtering.filter(user, action=self.filtering.FILTER_ACTION_DELETE)
+
+        # Add in the conditional expression from the user
+        if condition:
+            conditions = self.filtering.And(conditions, condition)
 
         # Default conditional expression to make sure the item actually exists
         for key, value in primary_key.items():
-            cond = Attr(key).eq(value)
-            if condition:
-                condition &= cond
-            else:
-                condition = cond
-
-        # Add in the user's permissions
-        user_conditions = self.filtering.filter(user)
-        if user_conditions:
-            if condition:
-                condition &= user_conditions
-            else:
-                condition = user_conditions
+            conditions = self.filtering.And(conditions, Attr(key).eq(value))
 
         # Perform the deletion
         try:
-            self.data_table.delete_item(Key=primary_key, ConditionExpression=condition)
+            self.data_table.delete_item(Key=primary_key, ConditionExpression=conditions)
             logger.info('[%(user)s] Successfully deleted record "%(primary_key)s"' % {
                 'user': self.user_identifier(user),
                 'primary_key': primary_key,
@@ -579,7 +616,7 @@ class DynamoAPI(BaseAPI):
 
         # Create audit log
         self.audit_log(
-            action='DELETE',
+            action=self.AUDIT_ACTION_DELETE,
             request=request,
             user=user,
             resource=primary_key,

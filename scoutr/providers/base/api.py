@@ -1,16 +1,18 @@
 import json
 import re
 from abc import abstractmethod
+from concurrent import futures
+from concurrent.futures.thread import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Any, Callable, Union, Tuple
+from typing import List, Dict, Optional, Any, Callable, Union, Tuple, Set
 
 from scoutr.exceptions import UnauthorizedException, BadRequestException, ForbiddenException, NotFoundException
 from scoutr.models.audit import AuditLog, AuditUser
 from scoutr.models.config import Config
 from scoutr.models.request import Request, UserData
 from scoutr.models.user import User, Group, Permissions
-from scoutr.providers.base.filtering import Filtering
+from scoutr.providers.base.filtering import Filtering, LocalFiltering
 from scoutr.utils.utils import merge_lists
 
 try:
@@ -23,7 +25,14 @@ except ImportError:
 class BaseAPI:
     filtering: Filtering
     unique_func: Callable[[List[Dict], str], List[str]] = \
-        lambda data, key: sorted(set([item[key] for item in data if item]))
+        lambda data, key: sorted(set([item[key] for item in data if item and item[key]]))
+
+    AUDIT_ACTION_CREATE = 'CREATE'
+    AUDIT_ACTION_UPDATE = 'UPDATE'
+    AUDIT_ACTION_LIST = 'LIST'
+    AUDIT_ACTION_GET = 'GET'
+    AUDIT_ACTION_SEARCH = 'SEARCH'
+    AUDIT_ACTION_DELETE = 'DELETE'
 
     def __init__(self, config: Config):
         self.config = config
@@ -34,14 +43,14 @@ class BaseAPI:
             try:
                 user = self.get_user(request.user.id, request.user.data)
             except Exception as e:
-                print('Failed to fetch user: %s' % e)
+                print(f'Failed to fetch user: {e}')
                 return False
 
             # Validate the user
             try:
                 self.validate_user(user)
             except Exception as e:
-                print('Encountered error while validating user: %s' % e)
+                print(f'Encountered error while validating user: {e}')
                 return False
 
         # Verify user was provided/looked up
@@ -74,7 +83,7 @@ class BaseAPI:
             value = merge_lists(getattr(user, attribute), getattr(group, attribute))
             setattr(user, attribute, value)
 
-    def get_user(self, user_id: str, user_data: Optional[UserData]) -> User:
+    def get_user(self, user_id: str, user_data: Optional[UserData] = None) -> User:
         is_user = True
         user = User(id=user_id)
 
@@ -89,17 +98,11 @@ class BaseAPI:
 
         # Try to find supplied entitlements in the auth table
         entitlement_ids: List[str] = []
-        if user_data and user_data.groups:
-            for group_id in user_data.groups:
-                entitlement = self.get_auth(group_id)
-                if not entitlement:
-                    print('Failed to get entitlement')
-
-                    # Entitlement not in the auth table
-                    continue
-
+        if user_data and user_data.entitlements:
+            entitlements = self.get_entitlements(user_data.entitlements)
+            for entitlement in entitlements:
                 # Store this as a real entitlement
-                entitlement_ids.append(group_id)
+                entitlement_ids.append(entitlement.id)
 
                 # Add sub-groups
                 user.groups.extend(entitlement.groups)
@@ -115,7 +118,10 @@ class BaseAPI:
                     user.update_fields_permitted,
                     entitlement.update_fields_permitted
                 )
-                user.filter_fields = merge_lists(user.filter_fields, entitlement.filter_fields)
+                user.read_filters = merge_lists(user.read_filters, entitlement.read_filters)
+                user.create_filters = merge_lists(user.create_filters, entitlement.create_filters)
+                user.update_filters = merge_lists(user.update_filters, entitlement.update_filters)
+                user.delete_filters = merge_lists(user.delete_filters, entitlement.delete_filters)
 
         # Check that a user was found
         if not is_user and not entitlement_ids:
@@ -142,8 +148,8 @@ class BaseAPI:
                 user.name = user_data.name
             if user_data.email:
                 user.email = user_data.email
-            if user_data.groups:
-                user.groups = user_data.groups
+            if user_data.entitlements:
+                user.groups = user_data.entitlements
 
         # Update user object with all applied entitlements
         if entitlement_ids:
@@ -165,20 +171,44 @@ class BaseAPI:
             if not isinstance(item, str):
                 raise UnauthorizedException(f"User '{user.id}' field 'exclude_fields' must be a list of strings")
 
-        # Validate filter fields
-        # for item in user.filter_fields:
-        #     if not isinstance(item, FilterField) or 'field' not in item or 'value' not in item:
-        #         raise UnauthorizedException(
-        #             f"User '{user.id}' field 'filter_fields' must be a list of dictionaries with each "
-        #             "item formatted as {'field': 'field_name', 'value': 'value'}"
-        #         )
+        # Validate read filters
+        for read_filter in user.read_filters:
+            if not read_filter.field or not read_filter.value:
+                raise UnauthorizedException(
+                    f"User '{user.id}' field 'read_filters' must be a list of dictionaries with each "
+                    "item formatted as {'field': 'field_name', 'operation': 'eq', 'value': 'value'}"
+                )
+
+        # Validate create filters
+        for create_filters in user.create_filters:
+            if not create_filters.field or not create_filters.value:
+                raise UnauthorizedException(
+                    f"User '{user.id}' field 'create_filters' must be a list of dictionaries with each "
+                    "item formatted as {'field': 'field_name', 'operation': 'eq', 'value': 'value'}"
+                )
+
+        # Validate update filters
+        for update_filters in user.update_filters:
+            if not update_filters.field or not update_filters.value:
+                raise UnauthorizedException(
+                    f"User '{user.id}' field 'update_filters' must be a list of dictionaries with each "
+                    "item formatted as {'field': 'field_name', 'operation': 'eq', 'value': 'value'}"
+                )
+
+        # Validate delete filters
+        for delete_filters in user.delete_filters:
+            if not delete_filters.field or not delete_filters.value:
+                raise UnauthorizedException(
+                    f"User '{user.id}' field 'delete_filters' must be a list of dictionaries with each "
+                    "item formatted as {'field': 'field_name', 'operation': 'eq', 'value': 'value'}"
+                )
 
         # Make sure all the endpoints are valid regex
         for permitted_endpoint in user.permitted_endpoints:
             try:
                 re.compile(permitted_endpoint.endpoint)
             except Exception as e:
-                raise BadRequestException('Failed to compile endpoint regex: %s' % e)
+                raise BadRequestException(f'Failed to compile endpoint regex: {e}')
 
     def validate_request(self, req: Request, user: User):
         # Make sure the user has permissions to access this endpoint
@@ -192,7 +222,7 @@ class BaseAPI:
 
             # User is authorized to access this endpoint
             return
-        
+
         # Make sure query params have keys and values
         if set(req.query_params.keys()).intersection(['']) or set(req.query_params.values()).intersection(['']):
             raise BadRequestException('Query strings must have keys and values')
@@ -241,23 +271,40 @@ class BaseAPI:
         if required_fields:
             missing_keys = set(required_fields).difference(set(item.keys()))
             if missing_keys:
-                raise BadRequestException('Missing required fields %s' % missing_keys)
+                raise BadRequestException(f'Missing required fields {missing_keys}')
 
         sentry_sdk.add_breadcrumb(category='validate', message='Validated required fields were included', level='info')
 
         # Perform field validation
-        for key, func in validation.items():
-            if key in item:
-                response = func(item[key], item, existing_item)
-                if isinstance(response, dict):
-                    if 'result' not in response:
-                        raise BadRequestException('Validator for %s is not properly configured' % key)
-                    elif not response['result']:
-                        if not isinstance(response.get('message'), str):
-                            raise BadRequestException('Validator for %s is not properly configured' % key)
-                        raise BadRequestException(response['message'])
-                elif not response:
-                    raise BadRequestException("Invalid value for key '%s'" % key)
+        errors: Dict[str, str] = {}
+        with ThreadPoolExecutor() as executor:
+            threads = {}
+            for key, func in validation.items():
+                if key in item:
+                    future = executor.submit(func, item[key], item, existing_item)
+                    threads.update({future: key})
+
+            for future in futures.as_completed(threads):
+                key = threads[future]
+                try:
+                    result = future.result()
+                except Exception as e:
+                    errors[key] = str(e)
+                    continue
+
+                if isinstance(result, dict):
+                    if 'result' not in result:
+                        errors[key] = 'Validator is not properly configured'
+                    elif not result['result']:
+                        if not isinstance(result.get('message'), str):
+                            errors[key] = 'Validator is not properly configured'
+                            continue
+                        errors[key] = result['message']
+                elif not result:
+                    errors[key] = 'Invalid value'
+
+        if errors:
+            raise BadRequestException(errors)
 
         sentry_sdk.add_breadcrumb(category='validate', message='Validated input fields', level='info')
 
@@ -274,21 +321,15 @@ class BaseAPI:
         # Run validation
         self.validate_fields(validation, required_fields, data)
 
-        # FIXME: Creation filters
-        # for filter_field in user.filter_fields:
-        #     key = filter_field.field
-        #     filter_value = filter_field.value
-        #
-        #     # Perform the filter
-        #     value = data[key]
-        #     if isinstance(filter_value, list) and value not in filter_value or \
-        #             isinstance(filter_value, str) and value != filter_value:
-        #         raise BadRequestException(f'Unauthorized value for field {key}')
+        # Creation filters
+        local_filter = LocalFiltering(data)
+        if local_filter.filter(user, action=local_filter.FILTER_ACTION_CREATE) is False:
+            raise UnauthorizedException(f'Unauthorized value(s) for field(s): {local_filter.failed_filters}')
 
         return user
 
     def _prepare_list(self, request: Request, process_path_params: bool = True,
-                      process_search_keys: bool = True) -> (User, Dict[str, str]):
+                      process_search_keys: bool = True) -> Tuple[User, Dict[str, str]]:
         # Get user
         user = self.initialize_request(request)
 
@@ -311,12 +352,13 @@ class BaseAPI:
         return user, params
 
     @staticmethod
-    def validate_update(user: User, data: dict):
+    def validate_update(user: User, data: dict, existing_item: dict):
         """
         Make sure the user has permission to update all of the fields specified
 
         :param User user: User object
         :param dict data: Data object
+        :param dict existing_item: Existing object
         :raises UnauthorizedException
         """
         if user.update_fields_permitted:
@@ -325,12 +367,24 @@ class BaseAPI:
             unauthorized_fields = set(data.keys()).difference(set(user.update_fields_permitted))
             if unauthorized_fields:
                 raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
-        elif user.update_fields_restricted:
+
+        # Combine both exclude_fields and update_fields_restricted together. If the user can't see the field, they don't
+        # have permission to update the field.
+        restricted_fields = set(user.exclude_fields + user.update_fields_restricted)
+        if restricted_fields:
             # User is restricted from updating certain fields. Determine list of fields the user
             # is not authorized to update.
-            unauthorized_fields = set(data.keys()).intersection(set(user.update_fields_restricted))
+            unauthorized_fields = set(data.keys()).intersection(restricted_fields)
             if unauthorized_fields:
                 raise UnauthorizedException(f'Not authorized to update fields {unauthorized_fields}')
+
+        combined_object = existing_item.copy()
+        combined_object.update(data)
+
+        # Update filters
+        local_filter = LocalFiltering(combined_object)
+        if local_filter.filter(user, action=local_filter.FILTER_ACTION_UPDATE) is False:
+            raise UnauthorizedException(f'Unauthorized value(s) for field(s): {local_filter.failed_filters}')
 
     def post_process(self, data: List[dict], user: User) -> List[dict]:
         # If no filtering is necessary, return output
@@ -343,10 +397,7 @@ class BaseAPI:
             for field in user.exclude_fields:
                 if field in item:
                     if field not in fields_logged:
-                        print('[%(user)s] Excluding field "%(field)s" from response' % {
-                            'user': self.user_identifier(user),
-                            'field': field
-                        })
+                        print(f'[{self.user_identifier(user)}] Excluding field "{field}" from response"')
                         fields_logged.add(field)
                     del item[field]
 
@@ -370,25 +421,25 @@ class BaseAPI:
                 username=user.username,
                 source_ip=request.source_ip,
                 user_agent=request.user_agent,
-                filter_fields=user.filter_fields
+                read_filters=user.read_filters,
+                create_filters=user.create_filters,
+                update_filters=user.update_filters,
+                delete_filters=user.delete_filters
             ),
             action=action,
             method=request.method,
-            path=request.path
+            path=request.path,
+            query_params=request.query_params,
+            body=request.body
         )
 
         # Add expiry time for read events
-        if action in ('GET', 'LIST', 'SEARCH'):
+        if action in (self.AUDIT_ACTION_GET, self.AUDIT_ACTION_LIST, self.AUDIT_ACTION_SEARCH):
             expire_time = now + timedelta(days=self.config.log_retention_days)
             audit_log.expire_time = int(expire_time.timestamp())
 
-        if request.query_params:
-            audit_log.query_params = request.query_params
-
         # Add body
-        if request.body:
-            audit_log.body = request.body
-        elif changes:
+        if changes:
             audit_log.body = changes
 
         # Add resource
@@ -403,28 +454,6 @@ class BaseAPI:
             print('Failed to store audit log')
             print('Failed audit log', item)
 
-    @classmethod
-    def value_in_list(cls, value, valid_options, option_name='option', custom_error_message=None):
-        """
-        Check if a value is contained in a list of valid options. This is supplied as a convenience function
-        and is intended to be used with the input field validation on creates/updates.
-
-        :param str value: Value to check
-        :param list of str valid_options: List of options that the value should be included in for this to be successful
-        :param str option_name: Optional descriptive name of the option that can be used to enrich an error message.
-        :param str custom_error_message: Optional custom error message to return instead of the default one.
-        :return: Dictionary that can be used with the field_validation
-        :rtype: dict
-        """
-        return {
-            'result': value in valid_options,
-            'message': custom_error_message or "%s is not a valid %s. Valid options: %s" % (
-                value,
-                option_name,
-                valid_options
-            )
-        }
-
     @staticmethod
     def user_identifier(user: User):
         return f'{user.id}: {user.name} ({user.username} - {user.email})'
@@ -435,6 +464,10 @@ class BaseAPI:
 
     @abstractmethod
     def get_auth(self, user_id: str) -> Optional[User]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_entitlements(self, entitlement_ids: List[str]) -> List[User]:
         raise NotImplementedError
 
     @abstractmethod
@@ -468,7 +501,7 @@ class BaseAPI:
         raise NotImplementedError
 
     def history(self, request: Request, key: str, value: str,
-                actions: tuple = ('CREATE', 'UPDATE', 'DELETE')) -> List[dict]:
+                actions: tuple = (AUDIT_ACTION_CREATE, AUDIT_ACTION_UPDATE, AUDIT_ACTION_DELETE)) -> List[dict]:
         """
         Given a resource key and value, build the history of the item over time.
 
@@ -500,7 +533,7 @@ class BaseAPI:
         # Get the original record
         current_item: dict = {'data': {}, 'time': None}
         for item in logs:
-            if item['action'] == 'CREATE':
+            if item['action'] == self.AUDIT_ACTION_CREATE:
                 current_item['time'] = item['time']
                 current_item['data'] = item['body']
                 break
@@ -509,9 +542,9 @@ class BaseAPI:
         history = [current_item]
         for item in logs:
             # Skip creation calls
-            if item['action'] == 'CREATE':
+            if item['action'] == self.AUDIT_ACTION_CREATE:
                 continue
-            elif item['action'] == 'DELETE':
+            elif item['action'] == self.AUDIT_ACTION_DELETE:
                 history.insert(0, {'time': item['time'], 'data': {}})
                 continue
 
@@ -532,5 +565,5 @@ class BaseAPI:
         raise NotImplementedError
 
     @abstractmethod
-    def delete(self, request: Request, partition_key: dict) -> dict:
+    def delete(self, request: Request, primary_key: dict) -> dict:
         raise NotImplementedError

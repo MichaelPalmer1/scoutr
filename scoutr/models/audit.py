@@ -1,4 +1,4 @@
-from typing import Dict, Union, List
+from typing import Dict, Union, List, Optional
 
 from scoutr.models import Model
 from scoutr.models.user import FilterField
@@ -11,7 +11,10 @@ class AuditUser(Model):
     email: str
     source_ip: str
     user_agent: str
-    filter_fields: List[FilterField]
+    read_filters: List[FilterField]
+    create_filters: List[FilterField]
+    update_filters: List[FilterField]
+    delete_filters: List[FilterField]
 
 
 class AuditLog(Model):
@@ -20,7 +23,7 @@ class AuditLog(Model):
     action: str
     method: str
     path: str
-    expire_time: int
-    query_params: Dict[str, str]
-    resource: Dict[str, str]
-    body: Union[dict, list]
+    expire_time: Optional[int]
+    query_params: Optional[Dict[str, str]]
+    resource: Optional[Dict[str, str]]
+    body: Optional[Union[dict, list]]

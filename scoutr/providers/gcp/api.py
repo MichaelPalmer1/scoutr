@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Optional, Any, Callable, Union, Tuple
 
 from firebase_admin import firestore
-from google.cloud.firestore_v1 import Client, DocumentSnapshot, CollectionReference
+from google.cloud.firestore_v1 import Client, DocumentSnapshot, CollectionReference, Query
 
 from scoutr.exceptions import NotFoundException, BadRequestException
 from scoutr.models.config import Config
@@ -39,6 +39,14 @@ class FirestoreAPI(BaseAPI):
 
         # Create user object
         return User.load(result.to_dict())
+
+    def get_entitlements(self, entitlement_ids: List[str]) -> List[User]:
+        entitlements = []
+        for result in Query(self.auth_table).where('id', 'in', entitlement_ids).stream():
+            record = result.to_dict()
+            record['id'] = result.id
+            entitlements.append(User.load(record))
+        return entitlements
 
     def get_group(self, group_id: str) -> Optional[Group]:
         # Try to find user in the auth table
@@ -105,11 +113,12 @@ class FirestoreAPI(BaseAPI):
             sentry_sdk.add_breadcrumb(category='data', message='Created item in Firestore', level='info')
 
         # Create audit log
-        self.audit_log(action='CREATE', resource=resource, request=request, user=user)
+        self.audit_log(action=self.AUDIT_ACTION_CREATE, resource=resource, request=request, user=user)
 
         return resource
 
-    def update(self, request: Request, primary_key: dict, data: dict, validation: dict, audit_action='UPDATE') -> dict:
+    def update(self, request: Request, primary_key: dict, data: dict, validation: dict,
+               audit_action=BaseAPI.AUDIT_ACTION_UPDATE) -> dict:
         """
         Update an item in Dynamo
 
@@ -129,19 +138,17 @@ class FirestoreAPI(BaseAPI):
 
         # Validate audit action
         audit_action = audit_action.upper()
-        if audit_action in ('CREATE', 'DELETE', 'GET', 'LIST', 'SEARCH'):
+        if audit_action in (self.AUDIT_ACTION_CREATE, self.AUDIT_ACTION_DELETE,
+                            self.AUDIT_ACTION_GET, self.AUDIT_ACTION_LIST, self.AUDIT_ACTION_SEARCH):
             raise Exception('%s is a reserved built-in audit action' % audit_action)
 
         # Deny updates to primary key
         if self.config.primary_key in data:
             raise BadRequestException('Primary key %s cannot be updated' % self.config.primary_key)
 
-        # Validate update
-        self.validate_update(user, data)
-
         # Add in the user's permissions
         filtering = GCPFiltering(self.data_table)
-        filtering.filter(user)
+        filtering.filter(user, action=filtering.FILTER_ACTION_READ)
 
         # Get the existing item
         existing_item = filtering.query.stream()
@@ -158,6 +165,9 @@ class FirestoreAPI(BaseAPI):
 
         # Found the item
         existing_item = existing_item[0]
+
+        # Validate update
+        self.validate_update(user, data, existing_item)
 
         # Perform field validation
         if validation:
@@ -240,7 +250,7 @@ class FirestoreAPI(BaseAPI):
             raise BadRequestException('Multiple items returned')
         else:
             # Item was found, return the single item
-            self.audit_log(action='GET', request=request, user=user, resource={key: value})
+            self.audit_log(action=self.AUDIT_ACTION_GET, request=request, user=user, resource={key: value})
             return output[0]
 
     def list(self, request: Request) -> List[dict]:
@@ -266,7 +276,7 @@ class FirestoreAPI(BaseAPI):
             data.append(record_dict)
         data = self.post_process(data, user)
 
-        self.audit_log('LIST', request, user)
+        self.audit_log(self.AUDIT_ACTION_LIST, request, user)
 
         return data
 
@@ -299,7 +309,7 @@ class FirestoreAPI(BaseAPI):
         output = unique_func(data, key)
 
         # Create audit log
-        self.audit_log('LIST', request, user)
+        self.audit_log(self.AUDIT_ACTION_LIST, request, user)
 
         return output
 
@@ -393,7 +403,7 @@ class FirestoreAPI(BaseAPI):
                 output.append(record_dict)
 
         # Create audit log
-        self.audit_log(action='SEARCH', request=request, user=user)
+        self.audit_log(action=self.AUDIT_ACTION_SEARCH, request=request, user=user)
 
         # Return the filtered response
         return self.post_process(output, user)
@@ -414,7 +424,7 @@ class FirestoreAPI(BaseAPI):
 
         # Add in the user's permissions
         filtering = GCPFiltering(self.data_table)
-        filtering.filter(user)
+        filtering.filter(user, action=filtering.FILTER_ACTION_DELETE)
 
         # Perform the deletion
         try:
@@ -438,7 +448,7 @@ class FirestoreAPI(BaseAPI):
 
         # Create audit log
         self.audit_log(
-            action='DELETE',
+            action=self.AUDIT_ACTION_DELETE,
             request=request,
             user=user,
             resource=primary_key,
