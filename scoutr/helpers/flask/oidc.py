@@ -55,7 +55,7 @@ def get_user_from_oidc(api: BaseAPI, request: APIRequest) -> RequestUser:
 
     user_data = UserData(
         name=name,
-        email=request.headers.get(api.config.oidc_username_header),
+        email=request.headers.get(api.config.oidc_email_header),
         username=request.headers.get(api.config.oidc_username_header),
         entitlements=entitlements
     )
