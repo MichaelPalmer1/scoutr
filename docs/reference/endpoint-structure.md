@@ -66,7 +66,25 @@ def lambda_handler(event, context):
 ## List all unique values for a key
 
 The list by unique key endpoint is provided as a means to display all unique values for a single search key. It is
-implemented by specifying a value for the `key` argument of the `list_unique_values()` method.
+implemented by specifying a value for the `key` argument of the `list_unique_values()` method. Additionally, if you
+wish to run a custom unique function against the returned dataset, you can specify that as a callable in the
+`unique_func` argument. The function should accept a `list` of `dicts` as the first argument (the data) and a
+`str` (the unique key) as the second argument. It should output a `list` of `strs`. For example:
+
+```python
+def unique_values(data: List[dict], key: str) -> List[str]:
+    return sorted(
+        set(
+            [
+                item[key]
+                for item in data
+                if item and item[key]
+            ]
+        )
+    )
+
+data = api.list_unique_values(request, key='type', unique_func=unique_values)
+```
 
 ### Implementation Example
 
