@@ -1,7 +1,7 @@
 To install Scoutr, install it using Pip. Python 3.6+ is supported.
 
 Note that dependencies are installed based on which "extra" you use. The extras are tied to each of the
-[providers](../providers):
+[providers](../../providers):
 
 - AWS DynamoDB: `pip install scoutr[dynamodb]`
 - GCP FireStore: `pip install scoutr[firestore]`
