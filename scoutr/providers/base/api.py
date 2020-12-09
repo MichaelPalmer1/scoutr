@@ -66,8 +66,30 @@ class BaseAPI:
         return False
 
     def initialize_request(self, request: Request) -> User:
+        # Save the request to the context
+        sentry_sdk.set_context('request', request.dict())
+
+        # Set the user as we know it so far
+        sentry_sdk.set_user({
+            'id': request.user.id,
+            'ip_address': request.source_ip,
+            'user_agent': request.user_agent
+        })
+
         # Get user
         user = self.get_user(request.user.id, request.user.data)
+
+        # Set full user details in Sentry
+        sentry_sdk.set_user({
+            'id': user.id,
+            'username': user.name,
+            'email': user.email,
+            'ip_address': request.source_ip,
+            'user_agent': request.user_agent
+        })
+
+        # Save the whole user object as a context value
+        sentry_sdk.set_context('user', user.dict())
 
         # Validate user
         self.validate_user(user)
