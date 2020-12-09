@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import get_type_hints, Dict, Any, _GenericAlias
 
 
@@ -53,7 +54,7 @@ class Model:
     def dict(self) -> Dict[str, Any]:
         output = {}
         for attribute in self.attributes():
-            value = getattr(self, attribute)
+            value = deepcopy(getattr(self, attribute))
             if isinstance(value, list):
                 for i, item in enumerate(value):
                     if isinstance(item, Model):
