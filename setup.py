@@ -14,7 +14,7 @@ setup(
     author='Michael Palmer',
     packages=find_packages(),
     setup_requires=[
-        'setuptools_scm>=3.3.3,<4.2.0'
+        'setuptools_scm>=3.3.3,<5.1.0'
     ],
     install_requires=[],
     extras_require={
