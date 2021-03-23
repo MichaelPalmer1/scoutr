@@ -22,7 +22,7 @@ def get_user_from_oidc(api: BaseAPI, request: APIRequest) -> RequestUser:
             data=UserData(
                 username='222222222',
                 email='george.p.burdell@ge.com',
-                name='Georgia Burdell',
+                name='George Burdell',
                 entitlements=entitlements
             )
         )
