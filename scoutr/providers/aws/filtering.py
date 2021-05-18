@@ -113,6 +113,9 @@ class AWSFiltering(Filtering):
             values = value
         else:
             values = json.loads(value)
+        
+        if not isinstance(values, list):
+            raise Exception('In operation requires a list of values')
 
         return self.build_in_expr(attr, values)
 
