@@ -22,9 +22,9 @@ setup(
             'mypy'
         ],
         'flask': [
-            'Flask-API>=1.1,<3.0',
-            'Flask~=1.1.1',
-            'simplejson>=3.16,<3.18'
+            'Flask-API>=2.0',
+            'Flask~=2.0.0',
+            'simplejson>=3.17'
         ],
         'dynamo': [
             'boto3>=1.14.37,<1.17.0',
