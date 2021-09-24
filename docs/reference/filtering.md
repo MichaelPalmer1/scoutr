@@ -87,24 +87,29 @@ the data is filtered.
 
 #### Supported Operators
 
-| Operator      | Description                        | Syntax                                                                         | Providers                                  |
-|---------------|------------------------------------|--------------------------------------------------------------------------------|--------------------------------------------|
-| `eq`          | Value is equal to                  | `data=abc` OR `data__eq=abc`                                                   | All providers                              |
-| `ne`          | Value is not equal to              | `data__ne=abc`                                                                 | All providers                              |
-| `in`          | Value is in list                   | `data__in=["value1", "value2"]`                                                | All providers                              |
-| `notin`       | Value is not in list               | `data__notin=["value1", "value2"]`                                             | All providers                              |
-| `startswith`  | String starts with                 | `data__startswith=abc`                                                         | <ul><li>DynamoDB</li><li>MongoDB</li></ul> |
-| `contains`    | Strings contains                   | `data__contains=abc`                                                           | <ul><li>DynamoDB</li><li>MongoDB</li></ul> |
-| `notcontains` | String does not contain            | `data__notcontains=abc`                                                        | <ul><li>DynamoDB</li><li>MongoDB</li></ul> |
-| `exists`      | Attribute exists / not exists      | `data__exists=true` OR `data__exists=false`                                    | <ul><li>DynamoDB</li><li>MongoDB</li></ul> |
-| `gt`          | Greater than                       | `data__gt=20`                                                                  | All providers                              |
-| `lt`          | Less than                          | `data__lt=20`                                                                  | All providers                              |
-| `gte`         | Greater than or equal              | `data__gte=20`                                                                 | All providers                              |
-| `lte`         | Less than or equal                 | `data__lte=20`                                                                 | All providers                              |
-| `between`     | Value is between                   | `data__between=[10, 20]`                                                       | All providers                              |
-| `regex`       | Regular expression                 | `data__regex=^ab.*c$`                                                          | MongoDB                                    |
-| `type`        | Value is the specified type        | `data__type=array`                                                             | MongoDB                                    |
-| `haselements` | Value has the specified elements   | `data__haselements=["value1", "value2"] OR data__haselements={"key": "value"}` | MongoDB                                    |
+| Operator      | Description                              | Syntax                                                                         | Providers                                  |
+|---------------|------------------------------------------|--------------------------------------------------------------------------------|--------------------------------------------|
+| `eq`          | Value is equal to                        | `data=abc` OR `data__eq=abc`                                                   | All providers                              |
+| `ne`          | Value is not equal to                    | `data__ne=abc`                                                                 | All providers                              |
+| `in`          | Value is in list                         | `data__in=["value1", "value2"]`                                                | All providers                              |
+| `notin`       | Value is not in list                     | `data__notin=["value1", "value2"]`                                             | All providers                              |
+| `startswith`  | String starts with                       | `data__startswith=abc`                                                         | <ul><li>DynamoDB</li><li>MongoDB</li></ul> |
+| `contains`    | Strings contains                         | `data__contains=abc`                                                           | <ul><li>DynamoDB</li><li>MongoDB</li></ul> |
+| `notcontains` | String does not contain                  | `data__notcontains=abc`                                                        | <ul><li>DynamoDB</li><li>MongoDB</li></ul> |
+| `exists`      | Attribute exists / not exists            | `data__exists=true` OR `data__exists=false`                                    | <ul><li>DynamoDB</li><li>MongoDB</li></ul> |
+| `gt`          | Greater than                             | `data__gt=20`                                                                  | All providers                              |
+| `lt`          | Less than                                | `data__lt=20`                                                                  | All providers                              |
+| `gte`         | Greater than or equal                    | `data__gte=20`                                                                 | All providers                              |
+| `lte`         | Less than or equal                       | `data__lte=20`                                                                 | All providers                              |
+| `between`     | Value is between                         | `data__between=[10, 20]`                                                       | All providers                              |
+| `length`      | Length of array is                       | `data__length=4`                                                               | All providers                              |
+| `length__gt`  | Length of array is greater than          | `data__length__gt=4`                                                           | All providers                              |
+| `length__gte` | Length of array is greater than or equal | `data__length__gte=4`                                                          | All providers                              |
+| `length__lt`  | Length of array is less than             | `data__length__lt=4`                                                           | All providers                              |
+| `length__lte` | Length of array is less than or equal    | `data__length__lte=4`                                                          | All providers                              |
+| `regex`       | Regular expression                       | `data__regex=^ab.*c$`                                                          | MongoDB                                    |
+| `type`        | Value is the specified type              | `data__type=array`                                                             | MongoDB                                    |
+| `haselements` | Value has the specified elements         | `data__haselements=["value1", "value2"] OR data__haselements={"key": "value"}` | MongoDB                                    |
 
 #### Usage
 

@@ -142,6 +142,59 @@ class MongoFiltering(Filtering):
         else:
             raise Exception('Invalid value for exists operation')
 
+    def length(self, attr: str, value):
+        return {
+            attr: {'$size': value}
+        }
+
+    def length_greater_than(self, attr: str, value):
+        return {
+            '$expr': {
+                '$gt': [
+                    {
+                        '$size': f'${attr}'
+                    },
+                    value
+                ]
+            }
+        }
+
+    def length_greater_than_equal(self, attr: str, value):
+        return {
+            '$expr': {
+                '$gte': [
+                    {
+                        '$size': f'${attr}'
+                    },
+                    value
+                ]
+            }
+        }
+
+    def length_less_than(self, attr: str, value):
+        return {
+            '$expr': {
+                '$lt': [
+                    {
+                        '$size': f'${attr}'
+                    },
+                    value
+                ]
+            }
+        }
+
+    def length_less_than_equal(self, attr: str, value):
+        return {
+            '$expr': {
+                '$lte': [
+                    {
+                        '$size': f'${attr}'
+                    },
+                    value
+                ]
+            }
+        }
+
     @staticmethod
     def is_type(attr: str, value):
         return {

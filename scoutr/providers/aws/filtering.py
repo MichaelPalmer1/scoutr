@@ -126,3 +126,18 @@ class AWSFiltering(Filtering):
             values = json.loads(value)
 
         return self.build_in_expr(attr, values, negate=True)
+
+    def length(self, attr: str, value):
+        return Attr(attr).size().eq(value)
+
+    def length_greater_than(self, attr: str, value):
+        return Attr(attr).size().gt(value)
+
+    def length_greater_than_equal(self, attr: str, value):
+        return Attr(attr).size().gte(value)
+
+    def length_less_than(self, attr: str, value):
+        return Attr(attr).size().lt(value)
+
+    def length_less_than_equal(self, attr: str, value):
+        return Attr(attr).size().lte(value)

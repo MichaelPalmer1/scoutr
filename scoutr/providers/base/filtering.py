@@ -24,6 +24,11 @@ class Filtering:
     OPERATION_BETWEEN = 'between'
     OPERATION_IN = 'in'
     OPERATION_NOT_IN = 'notin'
+    OPERATION_LENGTH = 'length'
+    OPERATION_LENGTH_GREATER_THAN = 'length__gt'
+    OPERATION_LENGTH_GREATER_THAN_EQUAL = 'length__gte'
+    OPERATION_LENGTH_LESS_THAN = 'length__lt'
+    OPERATION_LENGTH_LESS_THAN_EQUAL = 'length__lte'
 
     FILTER_ACTION_READ = 'READ'
     FILTER_ACTION_CREATE = 'CREATE'
@@ -35,6 +40,10 @@ class Filtering:
         OPERATION_LESS_THAN,
         OPERATION_GREATER_THAN_EQUAL,
         OPERATION_LESS_THAN_EQUAL,
+        OPERATION_LENGTH_GREATER_THAN,
+        OPERATION_LENGTH_GREATER_THAN_EQUAL,
+        OPERATION_LENGTH_LESS_THAN,
+        OPERATION_LENGTH_LESS_THAN_EQUAL
     )
 
     @property
@@ -58,7 +67,12 @@ class Filtering:
             self.OPERATION_LESS_THAN_EQUAL: self.less_than_equal,
             self.OPERATION_BETWEEN: self.between,
             self.OPERATION_IN: self.is_in,
-            self.OPERATION_NOT_IN: self.not_in
+            self.OPERATION_NOT_IN: self.not_in,
+            self.OPERATION_LENGTH: self.length,
+            self.OPERATION_LENGTH_GREATER_THAN: self.length_greater_than,
+            self.OPERATION_LENGTH_GREATER_THAN_EQUAL: self.length_greater_than_equal,
+            self.OPERATION_LENGTH_LESS_THAN: self.length_less_than,
+            self.OPERATION_LENGTH_LESS_THAN_EQUAL: self.length_less_than_equal
         }
 
     @abstractmethod
@@ -119,6 +133,26 @@ class Filtering:
 
     @abstractmethod
     def not_in(self, attr: str, value):
+        raise NotImplementedError
+
+    @abstractmethod
+    def length(self, attr: str, value):
+        raise NotImplementedError
+
+    @abstractmethod
+    def length_greater_than(self, attr: str, value):
+        raise NotImplementedError
+
+    @abstractmethod
+    def length_greater_than_equal(self, attr: str, value):
+        raise NotImplementedError
+
+    @abstractmethod
+    def length_less_than(self, attr: str, value):
+        raise NotImplementedError
+
+    @abstractmethod
+    def length_less_than_equal(self, attr: str, value):
         raise NotImplementedError
 
     def _user_filters(self, filter_fields: List[FilterField]) -> Any:
@@ -390,3 +424,28 @@ class LocalFiltering(Filtering):
         else:
             values = json.loads(value)
         return self.data[attr] not in values
+
+    def length(self, attr: str, value):
+        if attr not in self.data:
+            return False
+        return len(self.data[attr]) == value
+
+    def length_greater_than(self, attr: str, value):
+        if attr not in self.data:
+            return False
+        return len(self.data[attr]) > value
+
+    def length_greater_than_equal(self, attr: str, value):
+        if attr not in self.data:
+            return False
+        return len(self.data[attr]) >= value
+
+    def length_less_than(self, attr: str, value):
+        if attr not in self.data:
+            return False
+        return len(self.data[attr]) < value
+
+    def length_less_than_equal(self, attr: str, value):
+        if attr not in self.data:
+            return False
+        return len(self.data[attr]) <= value
