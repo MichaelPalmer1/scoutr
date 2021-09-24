@@ -224,10 +224,15 @@ class Filtering:
     def get_operator(self, key: str) -> Tuple[str, str]:
         # Check if this is a magic operator
         operation = self.OPERATION_EQUAL
-        magic_operator_match = re.match('^(.+)__(.+)$', key)
+        magic_operator_match = re.match('^(?:(.+)__(.+__.+)|(.+)__(.+))$', key)
         if magic_operator_match:
-            key = magic_operator_match.group(1)
-            operation = magic_operator_match.group(2)
+            groups = magic_operator_match.groups()
+            if groups[0] and groups[1]:
+                key = groups[0]
+                operation = groups[1]
+            else:
+                key = groups[2]
+                operation = groups[3]
 
         # Fetch condition function from operation map
         return key, operation
