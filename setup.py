@@ -33,7 +33,7 @@ setup(
         ],
         'firestore': [
             'google~=3.0.0',
-            'firebase-admin~=4.4.0',
+            'firebase-admin>=4.4,<5.5',
         ],
         'mongo': [
             'pymongo~=3.11.0'
