@@ -11,7 +11,7 @@ setup(
     keywords='dynamo firestore mongo nosql api rbac',
     url='https://github.com/GESkunkworks/scoutr',
     use_scm_version=True,
-    author='Michael Palmer',
+    author='3ScreenZ',
     packages=find_packages(),
     setup_requires=[
         'setuptools_scm>=3.3.3,<4.2.0'
