@@ -6,4 +6,4 @@ A Golang implementation is available at https://github.com/MichaelPalmer1/scoutr
 
 ## Documentation
 
-Documentation is available at [https://michaelpalmer1.github.io/scoutr/](https://michaelpalmer1.github.io/scoutr/).
+Documentation is available at [https://scoutr.michaeldpalmer.com](https://scoutr.michaeldpalmer.com).
