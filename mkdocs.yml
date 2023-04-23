@@ -1,0 +1,39 @@
+site_name: Scoutr
+site_author: GE Skunkworks
+repo_url: https://github.com/GESkunkworks/scoutr
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tabs
+
+google_analytics:
+  - UA-69269008-3
+  - auto
+
+nav:
+  - Home:
+    - index.md
+    - providers.md
+  - Getting Started:
+    - getting-started/installation.md
+    - getting-started/configuration.md
+  - Reference:
+    - reference/endpoint-structure.md
+    - reference/access-control.md
+    - reference/authentication.md
+    - reference/filtering.md
+    - reference/validation.md
+    - reference/error-tracking.md
+  - Example:
+    - example.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - codehilite:
+  - admonition
+  - pymdownx.tabbed
+  - pymdownx.superfences

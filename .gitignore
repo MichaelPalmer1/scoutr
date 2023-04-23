@@ -1,0 +1,8 @@
+.idea/
+.eggs/
+*.egg-info/
+__pycache__/
+dist/
+build/
+.mypy_cache/
+site/

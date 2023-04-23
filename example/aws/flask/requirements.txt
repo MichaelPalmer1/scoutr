@@ -1,0 +1,7 @@
+flask
+flask-api
+uwsgi
+boto3
+simplejson
+sentry-sdk[flask]
+scoutr
