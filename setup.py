@@ -36,7 +36,7 @@ setup(
             'firebase-admin~=4.4.0',
         ],
         'mongo': [
-            'pymongo~=3.11.0'
+            'pymongo>=3.11,<4.4'
         ],
         'docs': [
             'mkdocs',
