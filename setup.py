@@ -9,7 +9,7 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     keywords='dynamo firestore mongo nosql api rbac',
-    url='https://github.com/GESkunkworks/scoutr',
+    url='https://github.com/MichaelPalmer1/scoutr',
     use_scm_version=True,
     author='3ScreenZ',
     packages=find_packages(),

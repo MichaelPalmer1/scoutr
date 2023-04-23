@@ -22,4 +22,4 @@ sentry_sdk.init(
 )
 ```
 
-Refer to the [examples](https://github.com/GESkunkworks/scoutr/tree/master/example) to see sample usage of Sentry.
+Refer to the [examples](https://github.com/MichaelPalmer1/scoutr/tree/master/example) to see sample usage of Sentry.

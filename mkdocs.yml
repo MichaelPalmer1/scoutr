@@ -1,6 +1,6 @@
 site_name: Scoutr
-site_author: GE Skunkworks
-repo_url: https://github.com/GESkunkworks/scoutr
+site_author: Michael Palmer
+repo_url: https://github.com/MichaelPalmer1/scoutr
 theme:
   name: material
   icon:
