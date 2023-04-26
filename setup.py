@@ -23,7 +23,7 @@ setup(
         ],
         'flask': [
             'Flask-API>=2.0',
-            'Flask~=2.0.0',
+            'Flask>=2.0,<2.4',
             'simplejson>=3.17'
         ],
         'dynamo': [
