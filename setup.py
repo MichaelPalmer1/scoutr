@@ -27,7 +27,7 @@ setup(
             'simplejson>=3.17'
         ],
         'dynamo': [
-            'boto3>=1.14.37,<1.17.0',
+            'boto3>=1.14.37,<1.34.0',
             'botocore~=1.17.37',
             'boto3-stubs[dynamodb]'
         ],
